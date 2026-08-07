@@ -11,7 +11,7 @@ import {
  * Admin-only procedure that checks if user is admin
  */
 const adminProcedure = publicProcedure.use(async ({ ctx, next }) => {
-  if (!ctx.user || ctx.user.role !== "admin") {
+  if (!ctx.user || ctx.user.rol !== "admin") {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "Solo administradores pueden acceder a esta función",
@@ -27,13 +27,15 @@ export const adminRouter = router({
       const users = await getAllUsers();
       return users.map((user) => ({
         id: user.id,
-        name: user.name,
-        email: user.email,
-        company: user.company,
-        role: user.role,
+        name: user.nombre,
+        email: user.id, // Note: In Supabase, email is in auth.users. 
+        // We might need a join or just use id as placeholder for now.
+        // Actually, the user profile might not have email.
+        company: user.empresa,
+        role: user.rol,
         status: user.status,
         createdAt: user.createdAt,
-        lastSignedIn: user.lastSignedIn,
+        lastSignedIn: user.fechaUltimoLogin,
       }));
     } catch (error) {
       console.error("Error getting users:", error);
@@ -48,7 +50,7 @@ export const adminRouter = router({
   updateUserRole: adminProcedure
     .input(
       z.object({
-        userId: z.number(),
+        userId: z.string(),
         role: z.enum(["user", "admin"]),
       })
     )
@@ -72,7 +74,7 @@ export const adminRouter = router({
   updateUserStatus: adminProcedure
     .input(
       z.object({
-        userId: z.number(),
+        userId: z.string(),
         status: z.enum(["active", "pending", "blocked"]),
       })
     )
@@ -99,7 +101,7 @@ export const adminRouter = router({
       const totalUsers = users.length;
       const activeUsers = users.filter((u) => u.status === "active").length;
       const blockedUsers = users.filter((u) => u.status === "blocked").length;
-      const adminUsers = users.filter((u) => u.role === "admin").length;
+      const adminUsers = users.filter((u) => u.rol === "admin").length;
 
       return {
         totalUsers,

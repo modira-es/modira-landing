@@ -1,39 +1,46 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { User } from "../../drizzle/schema";
-import { sdk } from "./sdk";
-import { getAuthenticatedUser } from "../auth-middleware";
+import type { Profile } from "../../drizzle/schema";
+import { getDb } from "../db";
+import { eq } from "drizzle-orm";
+import { profiles } from "../../drizzle/schema";
+import { verifySupabaseToken } from "../lib/supabase";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
-  user: User | null;
+  user: Profile | null;
 };
 
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
-  let user: User | null = null;
+  let profile: Profile | null = null;
 
-  // Try local session first
-  try {
-    user = await getAuthenticatedUser(opts.req);
-  } catch (error) {
-    // Local auth failed, try OAuth
-  }
+  // Extract token from Authorization header
+  const authHeader = opts.req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    const user = await verifySupabaseToken(token);
 
-  // Fall back to OAuth if local auth failed
-  if (!user) {
-    try {
-      user = await sdk.authenticateRequest(opts.req);
-    } catch (error) {
-      // Authentication is optional for public procedures.
-      user = null;
+    if (user) {
+      const db = await getDb();
+      if (db) {
+        const result = await db
+          .select()
+          .from(profiles)
+          .where(eq(profiles.id, user.id))
+          .limit(1);
+        
+        if (result.length > 0) {
+          profile = result[0];
+        }
+      }
     }
   }
 
   return {
     req: opts.req,
     res: opts.res,
-    user,
+    user: profile,
   };
 }

@@ -5,14 +5,12 @@ import { useLocation } from "wouter";
 import { 
   Plus, 
   Search, 
-  Filter, 
-  MoreVertical, 
   FileText, 
   Edit, 
   Copy, 
   Trash2, 
   ExternalLink,
-  ChevronRight,
+  MoreVertical,
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -27,21 +25,17 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Quotation, Profile } from "@shared/types";
+import { Quotation } from "@shared/types";
 
 export default function AdminQuotations() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [quotations, setQuotations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
-    if (!authLoading && (!user || user.user_metadata?.rol !== 'admin')) {
-      // Nota: En un entorno real, verificaríamos el rol desde la tabla profiles
-      // Por ahora confiamos en la metadata o el contexto
-    }
     fetchQuotations();
   }, [user, authLoading]);
 
@@ -84,7 +78,7 @@ export default function AdminQuotations() {
     const matchesSearch = 
       q.numero_presupuesto.toLowerCase().includes(searchTerm.toLowerCase()) ||
       q.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (q as any).profiles?.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
+      q.profiles?.nombre?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === "all" || q.estado === statusFilter;
     
@@ -159,8 +153,8 @@ export default function AdminQuotations() {
                     </div>
                     <h3 className="font-bold text-gray-900">{q.titulo}</h3>
                     <p className="text-sm text-gray-600">
-                      Cliente: <span className="font-medium">{(q as any).profiles?.nombre}</span> 
-                      { (q as any).profiles?.empresa && ` • ${(q as any).profiles?.empresa}` }
+                      Cliente: <span className="font-medium">{q.profiles?.nombre}</span> 
+                      { q.profiles?.empresa && ` • ${q.profiles?.empresa}` }
                     </p>
                   </div>
                 </div>
@@ -177,7 +171,7 @@ export default function AdminQuotations() {
                 </div>
 
                 <div className="flex items-center gap-2 pl-4">
-                  <Button variant="ghost" size="icon" title="Ver detalles">
+                  <Button variant="ghost" size="icon" title="Ver detalles" onClick={() => setLocation(`/presupuesto/${q.id}`)}>
                     <ExternalLink className="w-4 h-4" />
                   </Button>
                   <DropdownMenu>

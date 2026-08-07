@@ -1,16 +1,20 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Download, AlertCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Loader2, AlertCircle, Download } from "lucide-react";
+import { useState } from "react";
 
 export default function Billing() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"subscriptions" | "invoices">("subscriptions");
 
-  const subscriptionsQuery = trpc.stripe.getUserSubscriptions.useQuery();
-  const paymentsQuery = trpc.stripe.getUserPayments.useQuery();
+  const subscriptionsQuery = trpc.stripe.getUserSubscriptions.useQuery(undefined, {
+    enabled: !!user
+  });
+  const paymentsQuery = trpc.stripe.getUserPayments.useQuery(undefined, {
+    enabled: !!user
+  });
   const cancelSubscription = trpc.stripe.cancelSubscription.useMutation();
 
   const handleCancelSubscription = async (subscriptionId: string) => {
@@ -25,7 +29,7 @@ export default function Billing() {
     }
   };
 
-  const formatDate = (date: Date | null | undefined) => {
+  const formatDate = (date: any) => {
     if (!date) return "-";
     return new Date(date).toLocaleDateString("es-ES", {
       year: "numeric",
@@ -91,7 +95,7 @@ export default function Billing() {
                 </div>
               </Card>
             ) : (
-              subscriptionsQuery.data?.map((sub) => (
+              subscriptionsQuery.data?.map((sub: any) => (
                 <Card key={sub.id} className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -183,7 +187,7 @@ export default function Billing() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paymentsQuery.data?.map((payment) => (
+                    {paymentsQuery.data?.map((payment: any) => (
                       <tr key={payment.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-4 px-4 font-mono text-sm text-[#1E3A8A]">
                           {payment.stripeInvoiceId.substring(0, 12)}...

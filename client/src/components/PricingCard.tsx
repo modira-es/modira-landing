@@ -3,8 +3,8 @@ import { Card } from "@/components/ui/card";
 import { CheckCircle } from "lucide-react";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
 
 interface PricingCardProps {
   name: string;
@@ -28,12 +28,13 @@ export default function PricingCard({
   highlighted,
 }: PricingCardProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const createCheckout = trpc.stripe.createCheckoutSession.useMutation();
 
   const handleCheckout = async () => {
-    if (!isAuthenticated) {
-      startLogin();
+    if (!user) {
+      setLocation("/auth");
       return;
     }
 

@@ -1,42 +1,24 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import { ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
-  requiredRole?: "user" | "admin";
+  children: ReactNode;
 }
 
-/**
- * ProtectedRoute component that redirects unauthenticated users to login
- * and optionally checks for specific roles
- */
-export function ProtectedRoute({
-  children,
-  requiredRole,
-}: ProtectedRouteProps) {
-  const { user, isAuthenticated, loading } = useAuth();
+export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (loading) return;
-
-    // Redirect to login if not authenticated
-    if (!isAuthenticated) {
+    if (!loading && !user) {
       setLocation("/auth");
-      return;
     }
-
-    // Check role if required
-    if (requiredRole && user?.role !== requiredRole) {
-      setLocation("/");
-      return;
-    }
-  }, [isAuthenticated, loading, user, requiredRole, setLocation]);
+  }, [user, loading, setLocation]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A]"></div>
           <p className="mt-4 text-gray-600">Cargando...</p>
@@ -45,11 +27,7 @@ export function ProtectedRoute({
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
-  if (requiredRole && user?.role !== requiredRole) {
+  if (!user) {
     return null;
   }
 

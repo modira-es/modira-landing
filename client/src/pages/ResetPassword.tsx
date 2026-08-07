@@ -1,124 +1,122 @@
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
+import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export default function ResetPassword() {
   const [, setLocation] = useLocation();
+  const { updatePassword, loading: authLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [token, setToken] = useState("");
-  const [verifying, setVerifying] = useState(true);
-  const [tokenValid, setTokenValid] = useState(false);
+  const [validToken, setValidToken] = useState(false);
+  const [checkingToken, setCheckingToken] = useState(true);
 
   const [form, setForm] = useState({
     password: "",
     confirmPassword: "",
   });
 
-  const verifyTokenMutation = trpc.auth.verifyResetToken.useQuery(
-    { token },
-    { enabled: !!token && verifying }
-  );
-
-  const resetPasswordMutation = trpc.auth.resetPassword.useMutation();
-
-  // Extract token from URL on mount
+  // Check if user has a valid recovery session
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenParam = params.get("token");
+    const checkRecoverySession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-    if (!tokenParam) {
-      setError("Token no encontrado en la URL");
-      setVerifying(false);
-      return;
-    }
+        if (session) {
+          setValidToken(true);
+        } else {
+          setError(
+            "El enlace de recuperación es inválido o ha expirado. Por favor solicita uno nuevo."
+          );
+        }
+      } catch (err) {
+        console.error("[Auth] Error checking recovery session:", err);
+        setError("Error al verificar el enlace de recuperación.");
+      } finally {
+        setCheckingToken(false);
+      }
+    };
 
-    setToken(tokenParam);
+    checkRecoverySession();
   }, []);
 
-  // Verify token
-  useEffect(() => {
-    if (verifyTokenMutation.isSuccess && verifyTokenMutation.data?.valid) {
-      setTokenValid(true);
-      setVerifying(false);
-    } else if (verifyTokenMutation.isError) {
-      setError("El token es inválido o ha expirado");
-      setVerifying(false);
-    }
-  }, [verifyTokenMutation.isSuccess, verifyTokenMutation.isError, verifyTokenMutation.data]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    // Validations
+    if (form.password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (form.password !== form.confirmPassword) {
-        setError("Las contraseñas no coinciden");
-        setLoading(false);
+      const result = await updatePassword(form.password);
+
+      if (!result.success) {
+        setError(result.error || "Error al actualizar la contraseña");
         return;
       }
 
-      await resetPasswordMutation.mutateAsync({
-        token,
-        password: form.password,
-        confirmPassword: form.confirmPassword,
-      });
-
-      setSuccess("¡Contraseña restablecida exitosamente!");
+      setSuccess("¡Contraseña actualizada exitosamente!");
       setTimeout(() => {
         setLocation("/auth");
       }, 2000);
     } catch (err: any) {
-      setError(err.message || "Error al restablecer la contraseña");
+      setError(err.message || "Error al actualizar la contraseña");
     } finally {
       setLoading(false);
     }
   };
 
-  if (verifying) {
+  if (checkingToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center px-4 py-12">
-        <Card className="w-full max-w-md border-2 border-gray-200 shadow-xl p-8">
-          <div className="text-center">
+      <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-2 border-gray-200 shadow-xl">
+          <div className="p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A]"></div>
-            <p className="mt-4 text-gray-600">Verificando token...</p>
+            <p className="mt-4 text-gray-600">Verificando enlace...</p>
           </div>
         </Card>
       </div>
     );
   }
 
-  if (!tokenValid) {
+  if (!validToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center px-4 py-12">
+      <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-2 border-gray-200 shadow-xl">
           <div className="p-8">
-            <div className="text-center mb-6">
-              <h1 className="text-3xl font-bold text-[#1E3A8A] mb-2">Modira</h1>
-              <p className="text-gray-600">Token inválido o expirado</p>
-            </div>
-
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 mb-6">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">
-                {error || "El enlace de recuperación es inválido o ha expirado. Por favor, solicita uno nuevo."}
-              </p>
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+              <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
             </div>
 
             <Button
               onClick={() => setLocation("/auth")}
-              className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+              className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
             >
-              Volver al inicio de sesión
+              Volver al login
             </Button>
           </div>
         </Card>
@@ -127,33 +125,37 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center p-4">
       <Card className="w-full max-w-md border-2 border-gray-200 shadow-xl">
         <div className="p-8">
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-[#1E3A8A] mb-2">Modira</h1>
             <p className="text-gray-600">Establece una nueva contraseña</p>
           </div>
 
-          {/* Error Message */}
+          {/* Error Alert */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+              <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
             </div>
           )}
 
-          {/* Success Message */}
+          {/* Success Alert */}
           {success && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-700">{success}</p>
+            <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded">
+              <div className="flex gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-green-700">{success}</p>
+              </div>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Reset Password Form */}
+          <form onSubmit={handleResetPassword} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Nueva contraseña
@@ -167,12 +169,14 @@ export default function ResetPassword() {
                     setForm({ ...form, password: e.target.value })
                   }
                   required
+                  disabled={loading || authLoading}
                   className="w-full pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={loading || authLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -181,9 +185,7 @@ export default function ResetPassword() {
                   )}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Mínimo 8 caracteres, mayúsculas, minúsculas, números y caracteres especiales
-              </p>
+              <PasswordStrengthIndicator password={form.password} />
             </div>
 
             <div>
@@ -199,14 +201,14 @@ export default function ResetPassword() {
                     setForm({ ...form, confirmPassword: e.target.value })
                   }
                   required
+                  disabled={loading || authLoading}
                   className="w-full pr-10"
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowConfirmPassword(!showConfirmPassword)
-                  }
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={loading || authLoading}
                 >
                   {showConfirmPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -219,19 +221,22 @@ export default function ResetPassword() {
 
             <Button
               type="submit"
-              disabled={loading}
-              className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+              className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
+              disabled={loading || authLoading}
             >
-              {loading ? "Restableciendo..." : "Restablecer contraseña"}
+              {loading || authLoading
+                ? "Actualizando contraseña..."
+                : "Actualizar contraseña"}
             </Button>
 
-            <p className="text-center text-sm text-gray-600 pt-2">
+            <p className="text-center text-sm text-gray-600 pt-4">
               <button
                 type="button"
                 onClick={() => setLocation("/auth")}
                 className="text-[#1E3A8A] hover:underline font-semibold"
+                disabled={loading || authLoading}
               >
-                Volver al inicio de sesión
+                Volver al login
               </button>
             </p>
           </form>

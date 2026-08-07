@@ -1,9 +1,9 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Users,
   LogOut,
@@ -12,24 +12,25 @@ import {
   AlertCircle,
   ChevronDown,
   CheckCircle,
-  XCircle,
 } from "lucide-react";
 
 export default function AdminPanel() {
-  const { user, isAuthenticated, logout, loading } = useAuth();
+  const { user, signOut, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("usuarios");
-  const [expandedUser, setExpandedUser] = useState<number | null>(null);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRole, setFilterRole] = useState<"all" | "user" | "admin">("all");
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "pending" | "blocked">("all");
 
+  const isAdmin = user?.user_metadata?.rol === "admin";
+
   // Queries
   const usersQuery = trpc.admin.getUsers.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role === "admin",
+    enabled: !!user && isAdmin,
   });
   const statsQuery = trpc.admin.getStatistics.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role === "admin",
+    enabled: !!user && isAdmin,
   });
 
   // Mutations
@@ -45,10 +46,10 @@ export default function AdminPanel() {
   });
 
   useEffect(() => {
-    if (!loading && (!isAuthenticated || user?.role !== "admin")) {
+    if (!loading && (!user || !isAdmin)) {
       setLocation("/");
     }
-  }, [isAuthenticated, loading, user, setLocation]);
+  }, [user, loading, isAdmin, setLocation]);
 
   if (loading) {
     return (
@@ -61,20 +62,20 @@ export default function AdminPanel() {
     );
   }
 
-  if (!isAuthenticated || user?.role !== "admin") {
+  if (!user || !isAdmin) {
     return null;
   }
 
   const handleLogout = async () => {
     try {
-      await logout();
+      await signOut();
       setLocation("/");
     } catch (error) {
       console.error("Error al cerrar sesión:", error);
     }
   };
 
-  const handleRoleChange = async (userId: number, newRole: "user" | "admin") => {
+  const handleRoleChange = async (userId: string, newRole: "user" | "admin") => {
     try {
       await updateRoleMutation.mutateAsync({
         userId,
@@ -86,7 +87,7 @@ export default function AdminPanel() {
   };
 
   const handleStatusChange = async (
-    userId: number,
+    userId: string,
     newStatus: "active" | "pending" | "blocked"
   ) => {
     try {
@@ -134,7 +135,7 @@ export default function AdminPanel() {
             <h1 className="text-3xl font-bold text-[#1E3A8A]">
               Panel de Administración
             </h1>
-            <p className="text-gray-600 mt-1">Bienvenido, {user?.name}</p>
+            <p className="text-gray-600 mt-1">Bienvenido, {user?.user_metadata?.nombre || user?.email}</p>
           </div>
           <Button
             onClick={handleLogout}
@@ -413,7 +414,6 @@ export default function AdminPanel() {
                                 updateStatusMutation.isPending
                               }
                             >
-                              <XCircle className="h-4 w-4 mr-2" />
                               Bloqueado
                             </Button>
                           </div>
@@ -431,7 +431,7 @@ export default function AdminPanel() {
         {activeTab === "estadisticas" && (
           <div>
             <h2 className="text-2xl font-bold text-[#1E3A8A] mb-6">
-              Estadísticas del Sistema
+              Estadísticas de la Plataforma
             </h2>
 
             {statsQuery.isLoading ? (
@@ -439,38 +439,42 @@ export default function AdminPanel() {
                 <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A]"></div>
                 <p className="mt-4 text-gray-600">Cargando estadísticas...</p>
               </div>
-            ) : statsQuery.data ? (
+            ) : (
               <div className="grid md:grid-cols-4 gap-6">
                 <Card className="p-6 border-2 border-gray-200">
-                  <p className="text-sm text-gray-600 mb-2">
-                    Total de Usuarios
+                  <p className="text-sm text-gray-600 font-semibold mb-1">
+                    Total Usuarios
                   </p>
-                  <p className="text-4xl font-bold text-[#1E3A8A]">
-                    {statsQuery.data.totalUsers}
-                  </p>
-                </Card>
-                <Card className="p-6 border-2 border-gray-200">
-                  <p className="text-sm text-gray-600 mb-2">Usuarios Activos</p>
-                  <p className="text-4xl font-bold text-green-600">
-                    {statsQuery.data.activeUsers}
+                  <p className="text-3xl font-bold text-[#1E3A8A]">
+                    {statsQuery.data?.totalUsers}
                   </p>
                 </Card>
                 <Card className="p-6 border-2 border-gray-200">
-                  <p className="text-sm text-gray-600 mb-2">
+                  <p className="text-sm text-gray-600 font-semibold mb-1">
+                    Usuarios Activos
+                  </p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {statsQuery.data?.activeUsers}
+                  </p>
+                </Card>
+                <Card className="p-6 border-2 border-gray-200">
+                  <p className="text-sm text-gray-600 font-semibold mb-1">
                     Usuarios Bloqueados
                   </p>
-                  <p className="text-4xl font-bold text-red-600">
-                    {statsQuery.data.blockedUsers}
+                  <p className="text-3xl font-bold text-red-600">
+                    {statsQuery.data?.blockedUsers}
                   </p>
                 </Card>
                 <Card className="p-6 border-2 border-gray-200">
-                  <p className="text-sm text-gray-600 mb-2">Administradores</p>
-                  <p className="text-4xl font-bold text-blue-600">
-                    {statsQuery.data.adminUsers}
+                  <p className="text-sm text-gray-600 font-semibold mb-1">
+                    Administradores
+                  </p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {statsQuery.data?.adminUsers}
                   </p>
                 </Card>
               </div>
-            ) : null}
+            )}
           </div>
         )}
 
@@ -480,20 +484,12 @@ export default function AdminPanel() {
             <h2 className="text-2xl font-bold text-[#1E3A8A] mb-6">
               Configuración del Sistema
             </h2>
-
-            <Card className="p-6 border-2 border-gray-200">
-              <div className="flex gap-3">
-                <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-gray-900">
-                    Opciones de configuración
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Las opciones avanzadas de configuración del sistema estarán
-                    disponibles pronto.
-                  </p>
-                </div>
-              </div>
+            <Card className="p-8 border-2 border-gray-200">
+              <p className="text-gray-600">
+                Aquí podrás gestionar la configuración global de la plataforma,
+                claves de API, y otros parámetros del sistema.
+              </p>
+              <Button className="mt-6 bg-[#1E3A8A]">Guardar Cambios</Button>
             </Card>
           </div>
         )}

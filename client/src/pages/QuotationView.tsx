@@ -17,13 +17,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Quotation } from "@shared/types";
 
 export default function QuotationView() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const { user, loading: authLoading } = useAuth();
-  const [quotation, setQuotation] = useState<Quotation | null>(null);
+  const [quotation, setQuotation] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -144,7 +143,7 @@ export default function QuotationView() {
 
               <h2 className="text-xl font-bold text-[#1E3A8A] mt-12 mb-6">Servicios Incluidos</h2>
               <div className="space-y-4">
-                {quotation.servicios_incluidos.map((item: any, idx: number) => (
+                {quotation.servicios_incluidos?.map((item: any, idx: number) => (
                   <div key={idx} className="flex justify-between items-center p-4 rounded-lg bg-gray-50 border border-gray-100">
                     <div>
                       <p className="font-bold text-gray-900">{item.descripcion}</p>
@@ -200,7 +199,7 @@ export default function QuotationView() {
                   <Building2 className="w-4 h-4 text-gray-400" /> Datos de Facturación
                 </h3>
                 <p className="text-sm text-gray-600 font-medium">{quotation.empresa || "Cliente Final"}</p>
-                <p className="text-xs text-gray-400 mt-1">ID Cliente: {quotation.user_id.substring(0, 8)}...</p>
+                <p className="text-xs text-gray-400 mt-1">ID Cliente: {quotation.user_id?.substring(0, 8)}...</p>
               </div>
             </Card>
           </div>
