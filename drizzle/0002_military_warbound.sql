@@ -1,0 +1,1 @@
+ALTER TABLE `login_attempts` MODIFY COLUMN `success` tinyint NOT NULL;

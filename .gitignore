@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+.vite/
+
+# Variables de entorno
+.env
+.env.*
+
+# Logs
+.manus-logs/
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

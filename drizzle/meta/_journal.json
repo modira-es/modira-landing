@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1786033541454,
+      "tag": "0000_shocking_piledriver",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1786038322187,
+      "tag": "0001_left_tomorrow_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1786038394135,
+      "tag": "0002_military_warbound",
+      "breakpoints": true
+    }
+  ]
+}
