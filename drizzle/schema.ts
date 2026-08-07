@@ -1,130 +1,172 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, tinyint, index } from "drizzle-orm/mysql-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+  integer,
+  numeric,
+  jsonb,
+  pgEnum,
+  boolean,
+} from "drizzle-orm/pg-core";
+
+// Enums
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const statusEnum = pgEnum("status", ["active", "pending", "blocked"]);
+export const projectStatusEnum = pgEnum("project_status", ["activo", "pausado", "completado"]);
+export const quotationStatusEnum = pgEnum("quotation_status", [
+  "borrador",
+  "pendiente",
+  "pagado",
+  "rechazado",
+  "caducado",
+]);
+export const stripeProductTypeEnum = pgEnum("stripe_product_type", ["one_time", "subscription"]);
 
 /**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
+ * Profiles table linked to Supabase Auth users
  */
-export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }).unique(),
-  loginMethod: varchar("loginMethod", { length: 64 }), // "oauth", "email"
-  passwordHash: text("passwordHash"), // Hashed password for email/password auth
-  company: text("company"), // Optional company name
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  status: mysqlEnum("status", ["active", "pending", "blocked"]).default("active").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn"),
-}, (table) => ({
-  emailIdx: index("email_idx").on(table.email),
-}));
+export const profiles = pgTable("profiles", {
+  id: uuid("id").primaryKey().notNull(), // Linked to auth.users.id
+  nombre: text("nombre").notNull(),
+  empresa: text("empresa"),
+  telefono: text("telefono"),
+  rol: roleEnum("rol").default("user").notNull(),
+  status: statusEnum("status").default("active").notNull(),
+  fechaRegistro: timestamp("fecha_registro").defaultNow().notNull(),
+  fechaUltimoLogin: timestamp("fecha_ultimo_login"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
+export type Profile = typeof profiles.$inferSelect;
+export type InsertProfile = typeof profiles.$inferInsert;
 
-// Password Reset Tokens Table
-export const passwordResetTokens = mysqlTable("password_reset_tokens", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  token: varchar("token", { length: 255 }).notNull().unique(),
-  expiresAt: timestamp("expiresAt").notNull(),
-  usedAt: timestamp("usedAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("user_id_idx").on(table.userId),
-  tokenIdx: index("token_idx").on(table.token),
-}));
+/**
+ * Projects table
+ */
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  nombre: text("nombre").notNull(),
+  descripcion: text("descripcion"),
+  estado: projectStatusEnum("estado").default("activo").notNull(),
+  fechaInicio: timestamp("fecha_inicio").defaultNow(),
+  fechaFin: timestamp("fecha_fin"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
-export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = typeof projects.$inferInsert;
 
-// Login Attempts Table (for brute force protection)
-export const loginAttempts = mysqlTable("login_attempts", {
-  id: int("id").autoincrement().primaryKey(),
-  email: varchar("email", { length: 320 }).notNull(),
-  success: tinyint("success").notNull(),
-  ipAddress: varchar("ipAddress", { length: 45 }),
-  userAgent: text("userAgent"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
-  emailIdx: index("email_idx").on(table.email),
-  createdAtIdx: index("created_at_idx").on(table.createdAt),
-}));
+/**
+ * Quotations table
+ */
+export const quotations = pgTable("quotations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  numeroPresupuesto: text("numero_presupuesto").unique().notNull(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+  empresa: text("empresa"),
+  titulo: text("titulo").notNull(),
+  descripcionDetallada: text("descripcion_detallada"),
+  serviciosIncluidos: jsonb("servicios_incluidos").default([]).notNull(),
+  precioBase: numeric("precio_base", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }).default("21.00").notNull(),
+  precioTotal: numeric("precio_total", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  estado: quotationStatusEnum("estado").default("borrador").notNull(),
+  fechaEmision: timestamp("fecha_emision").defaultNow(),
+  fechaValidez: timestamp("fecha_validez"),
+  notas: text("notas"),
+  stripeSessionId: text("stripe_session_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
-export type LoginAttempt = typeof loginAttempts.$inferSelect;
-export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;
+export type Quotation = typeof quotations.$inferSelect;
+export type InsertQuotation = typeof quotations.$inferInsert;
 
-// Stripe Products Table
-export const stripeProducts = mysqlTable("stripe_products", {
-  id: int("id").autoincrement().primaryKey(),
-  stripeProductId: varchar("stripeProductId", { length: 255 }).notNull().unique(),
+/**
+ * Stripe Products Table
+ */
+export const stripeProducts = pgTable("stripe_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  stripeProductId: varchar("stripe_product_id", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  type: mysqlEnum("type", ["one_time", "subscription"]).notNull(),
-  active: int("active").default(1).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  type: stripeProductTypeEnum("type").notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type StripeProduct = typeof stripeProducts.$inferSelect;
 export type InsertStripeProduct = typeof stripeProducts.$inferInsert;
 
-// Stripe Prices Table
-export const stripePrices = mysqlTable("stripe_prices", {
-  id: int("id").autoincrement().primaryKey(),
-  stripePriceId: varchar("stripePriceId", { length: 255 }).notNull().unique(),
-  stripeProductId: varchar("stripeProductId", { length: 255 }).notNull(),
-  amount: int("amount").notNull(), // Amount in cents
+/**
+ * Stripe Prices Table
+ */
+export const stripePrices = pgTable("stripe_prices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  stripePriceId: varchar("stripe_price_id", { length: 255 }).notNull().unique(),
+  stripeProductId: varchar("stripe_product_id", { length: 255 }).notNull(),
+  amount: integer("amount").notNull(), // Amount in cents
   currency: varchar("currency", { length: 3 }).default("eur").notNull(),
   interval: varchar("interval", { length: 50 }), // "month", "year", null for one-time
-  intervalCount: int("intervalCount").default(1),
-  active: int("active").default(1).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  intervalCount: integer("interval_count").default(1),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type StripePrice = typeof stripePrices.$inferSelect;
 export type InsertStripePrice = typeof stripePrices.$inferInsert;
 
-// User Subscriptions Table
-export const userSubscriptions = mysqlTable("user_subscriptions", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }).notNull().unique(),
-  stripePriceId: varchar("stripePriceId", { length: 255 }).notNull(),
+/**
+ * User Subscriptions Table
+ */
+export const userSubscriptions = pgTable("user_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }).notNull().unique(),
+  stripePriceId: varchar("stripe_price_id", { length: 255 }).notNull(),
   status: varchar("status", { length: 50 }).notNull(), // "active", "past_due", "canceled", etc
-  currentPeriodStart: timestamp("currentPeriodStart"),
-  currentPeriodEnd: timestamp("currentPeriodEnd"),
-  canceledAt: timestamp("canceledAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  canceledAt: timestamp("canceled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type UserSubscription = typeof userSubscriptions.$inferSelect;
 export type InsertUserSubscription = typeof userSubscriptions.$inferInsert;
 
-// Payments/Invoices Table
-export const payments = mysqlTable("payments", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  stripeInvoiceId: varchar("stripeInvoiceId", { length: 255 }).notNull().unique(),
-  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 255 }),
-  amount: int("amount").notNull(), // Amount in cents
+/**
+ * Payments/Invoices Table
+ */
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  stripeInvoiceId: varchar("stripe_invoice_id", { length: 255 }).notNull().unique(),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
+  amount: integer("amount").notNull(), // Amount in cents
   currency: varchar("currency", { length: 3 }).default("eur").notNull(),
   status: varchar("status", { length: 50 }).notNull(), // "paid", "draft", "open", "uncollectible", "void"
   description: text("description"),
-  paidAt: timestamp("paidAt"),
-  dueDate: timestamp("dueDate"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  paidAt: timestamp("paid_at"),
+  dueDate: timestamp("due_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type Payment = typeof payments.$inferSelect;

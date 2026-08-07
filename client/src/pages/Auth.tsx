@@ -1,16 +1,17 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
-type AuthMode = "login" | "register" | "forgot-password" | "reset-password";
+type AuthMode = "login" | "register" | "forgot-password";
 
 export default function Auth() {
   const [, setLocation] = useLocation();
+  const { signIn, signUp, resetPassword, loading: authLoading } = useAuth();
   const [mode, setMode] = useState<AuthMode>("login");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -23,27 +24,15 @@ export default function Auth() {
 
   // Register form
   const [registerForm, setRegisterForm] = useState({
-    name: "",
+    nombre: "",
     email: "",
     password: "",
     confirmPassword: "",
-    company: "",
+    empresa: "",
   });
 
   // Forgot password form
   const [forgotForm, setForgotForm] = useState({ email: "" });
-
-  // Reset password form
-  const [resetForm, setResetForm] = useState({
-    token: "",
-    password: "",
-    confirmPassword: "",
-  });
-
-  const loginMutation = trpc.auth.login.useMutation();
-  const registerMutation = trpc.auth.register.useMutation();
-  const forgotPasswordMutation = trpc.auth.requestPasswordReset.useMutation();
-  const resetPasswordMutation = trpc.auth.resetPassword.useMutation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,10 +41,12 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      const result = await loginMutation.mutateAsync({
-        email: loginForm.email,
-        password: loginForm.password,
-      });
+      const result = await signIn(loginForm.email, loginForm.password);
+
+      if (!result.success) {
+        setError(result.error || "Error al iniciar sesión");
+        return;
+      }
 
       setSuccess("¡Iniciaste sesión exitosamente!");
       setTimeout(() => {
@@ -72,23 +63,58 @@ export default function Auth() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    // Validations
+    if (!registerForm.nombre.trim()) {
+      setError("El nombre es requerido");
+      return;
+    }
+
+    if (!registerForm.email.includes("@")) {
+      setError("El correo electrónico no es válido");
+      return;
+    }
+
+    if (registerForm.password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const result = await registerMutation.mutateAsync({
-        name: registerForm.name,
-        email: registerForm.email,
-        password: registerForm.password,
-        confirmPassword: registerForm.confirmPassword,
-        company: registerForm.company || undefined,
-      });
+      const result = await signUp(
+        registerForm.email,
+        registerForm.password,
+        registerForm.nombre,
+        registerForm.empresa
+      );
 
-      setSuccess("¡Cuenta creada exitosamente! Redirigiendo...");
+      if (!result.success) {
+        setError(result.error || "Error al registrarse");
+        return;
+      }
+
+      setSuccess(
+        "¡Registro exitoso! Por favor verifica tu correo electrónico para confirmar tu cuenta."
+      );
       setTimeout(() => {
-        setLocation("/area-cliente");
-      }, 1500);
+        setMode("login");
+        setRegisterForm({
+          nombre: "",
+          email: "",
+          password: "",
+          confirmPassword: "",
+          empresa: "",
+        });
+      }, 2000);
     } catch (err: any) {
-      setError(err.message || "Error al registrar la cuenta");
+      setError(err.message || "Error al registrarse");
     } finally {
       setLoading(false);
     }
@@ -101,12 +127,15 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      await forgotPasswordMutation.mutateAsync({
-        email: forgotForm.email,
-      });
+      const result = await resetPassword(forgotForm.email);
+
+      if (!result.success) {
+        setError(result.error || "Error al solicitar recuperación de contraseña");
+        return;
+      }
 
       setSuccess(
-        "Si el correo existe, recibirás un enlace para restablecer tu contraseña"
+        "Se ha enviado un correo de recuperación. Por favor revisa tu bandeja de entrada."
       );
       setTimeout(() => {
         setMode("login");
@@ -119,59 +148,39 @@ export default function Auth() {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
-
-    try {
-      await resetPasswordMutation.mutateAsync({
-        token: resetForm.token,
-        password: resetForm.password,
-        confirmPassword: resetForm.confirmPassword,
-      });
-
-      setSuccess("¡Contraseña restablecida exitosamente!");
-      setTimeout(() => {
-        setMode("login");
-        setResetForm({ token: "", password: "", confirmPassword: "" });
-      }, 1500);
-    } catch (err: any) {
-      setError(err.message || "Error al restablecer la contraseña");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center p-4">
       <Card className="w-full max-w-md border-2 border-gray-200 shadow-xl">
         <div className="p-8">
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-[#1E3A8A] mb-2">Modira</h1>
             <p className="text-gray-600">
-              {mode === "login" && "Inicia sesión en tu cuenta"}
-              {mode === "register" && "Crea una nueva cuenta"}
-              {mode === "forgot-password" && "Recupera tu contraseña"}
-              {mode === "reset-password" && "Establece una nueva contraseña"}
+              {mode === "login"
+                ? "Inicia sesión en tu cuenta"
+                : mode === "register"
+                ? "Crea una nueva cuenta"
+                : "Recupera tu contraseña"}
             </p>
           </div>
 
-          {/* Error Message */}
+          {/* Error Alert */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+              <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
             </div>
           )}
 
-          {/* Success Message */}
+          {/* Success Alert */}
           {success && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-700">{success}</p>
+            <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 rounded">
+              <div className="flex gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-green-700">{success}</p>
+              </div>
             </div>
           )}
 
@@ -190,6 +199,7 @@ export default function Auth() {
                     setLoginForm({ ...loginForm, email: e.target.value })
                   }
                   required
+                  disabled={loading || authLoading}
                   className="w-full"
                 />
               </div>
@@ -207,12 +217,14 @@ export default function Auth() {
                       setLoginForm({ ...loginForm, password: e.target.value })
                     }
                     required
+                    disabled={loading || authLoading}
                     className="w-full pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    disabled={loading || authLoading}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -225,17 +237,18 @@ export default function Auth() {
 
               <Button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
+                disabled={loading || authLoading}
               >
-                {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+                {loading || authLoading ? "Iniciando sesión..." : "Iniciar sesión"}
               </Button>
 
-              <div className="text-center space-y-2 pt-2">
+              <div className="text-center space-y-2 pt-4">
                 <button
                   type="button"
                   onClick={() => setMode("forgot-password")}
-                  className="text-sm text-[#1E3A8A] hover:underline block w-full"
+                  className="text-sm text-[#1E3A8A] hover:underline"
+                  disabled={loading || authLoading}
                 >
                   ¿Has olvidado tu contraseña?
                 </button>
@@ -245,6 +258,7 @@ export default function Auth() {
                     type="button"
                     onClick={() => setMode("register")}
                     className="text-[#1E3A8A] hover:underline font-semibold"
+                    disabled={loading || authLoading}
                   >
                     Regístrate
                   </button>
@@ -262,12 +276,29 @@ export default function Auth() {
                 </label>
                 <Input
                   type="text"
-                  placeholder="Juan García"
-                  value={registerForm.name}
+                  placeholder="Juan Pérez"
+                  value={registerForm.nombre}
                   onChange={(e) =>
-                    setRegisterForm({ ...registerForm, name: e.target.value })
+                    setRegisterForm({ ...registerForm, nombre: e.target.value })
                   }
                   required
+                  disabled={loading || authLoading}
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Empresa (opcional)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Mi Empresa S.L."
+                  value={registerForm.empresa}
+                  onChange={(e) =>
+                    setRegisterForm({ ...registerForm, empresa: e.target.value })
+                  }
+                  disabled={loading || authLoading}
                   className="w-full"
                 />
               </div>
@@ -284,24 +315,7 @@ export default function Auth() {
                     setRegisterForm({ ...registerForm, email: e.target.value })
                   }
                   required
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Empresa (opcional)
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Tu empresa"
-                  value={registerForm.company}
-                  onChange={(e) =>
-                    setRegisterForm({
-                      ...registerForm,
-                      company: e.target.value,
-                    })
-                  }
+                  disabled={loading || authLoading}
                   className="w-full"
                 />
               </div>
@@ -322,12 +336,14 @@ export default function Auth() {
                       })
                     }
                     required
+                    disabled={loading || authLoading}
                     className="w-full pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    disabled={loading || authLoading}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -355,14 +371,14 @@ export default function Auth() {
                       })
                     }
                     required
+                    disabled={loading || authLoading}
                     className="w-full pr-10"
                   />
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowConfirmPassword(!showConfirmPassword)
-                    }
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    disabled={loading || authLoading}
                   >
                     {showConfirmPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -375,18 +391,19 @@ export default function Auth() {
 
               <Button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
+                disabled={loading || authLoading}
               >
-                {loading ? "Registrando..." : "Crear cuenta"}
+                {loading || authLoading ? "Registrando..." : "Registrarse"}
               </Button>
 
-              <p className="text-center text-sm text-gray-600 pt-2">
+              <p className="text-center text-sm text-gray-600 pt-4">
                 ¿Ya tienes cuenta?{" "}
                 <button
                   type="button"
                   onClick={() => setMode("login")}
                   className="text-[#1E3A8A] hover:underline font-semibold"
+                  disabled={loading || authLoading}
                 >
                   Inicia sesión
                 </button>
@@ -409,133 +426,29 @@ export default function Auth() {
                     setForgotForm({ email: e.target.value })
                   }
                   required
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  Recibirás un enlace para restablecer tu contraseña
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
-              >
-                {loading ? "Enviando..." : "Enviar enlace"}
-              </Button>
-
-              <p className="text-center text-sm text-gray-600 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setMode("login")}
-                  className="text-[#1E3A8A] hover:underline font-semibold"
-                >
-                  Volver al inicio de sesión
-                </button>
-              </p>
-            </form>
-          )}
-
-          {/* Reset Password Form */}
-          {mode === "reset-password" && (
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Token
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Token del enlace de recuperación"
-                  value={resetForm.token}
-                  onChange={(e) =>
-                    setResetForm({ ...resetForm, token: e.target.value })
-                  }
-                  required
+                  disabled={loading || authLoading}
                   className="w-full"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Nueva contraseña
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={resetForm.password}
-                    onChange={(e) =>
-                      setResetForm({
-                        ...resetForm,
-                        password: e.target.value,
-                      })
-                    }
-                    required
-                    className="w-full pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Confirmar contraseña
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={resetForm.confirmPassword}
-                    onChange={(e) =>
-                      setResetForm({
-                        ...resetForm,
-                        confirmPassword: e.target.value,
-                      })
-                    }
-                    required
-                    className="w-full pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowConfirmPassword(!showConfirmPassword)
-                    }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
               <Button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
+                disabled={loading || authLoading}
               >
-                {loading ? "Restableciendo..." : "Restablecer contraseña"}
+                {loading || authLoading
+                  ? "Enviando..."
+                  : "Enviar enlace de recuperación"}
               </Button>
 
-              <p className="text-center text-sm text-gray-600 pt-2">
+              <p className="text-center text-sm text-gray-600 pt-4">
                 <button
                   type="button"
                   onClick={() => setMode("login")}
                   className="text-[#1E3A8A] hover:underline font-semibold"
+                  disabled={loading || authLoading}
                 >
-                  Volver al inicio de sesión
+                  Volver al login
                 </button>
               </p>
             </form>

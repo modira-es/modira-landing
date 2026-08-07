@@ -3,8 +3,8 @@ import Stripe from "stripe";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import { getDb } from "../db";
-import { payments, stripePrices, stripeProducts, userSubscriptions } from "../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { payments, stripePrices, stripeProducts, userSubscriptions, quotations } from "../../drizzle/schema";
+import { eq, and } from "drizzle-orm";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -16,7 +16,7 @@ export const stripeRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-    const products = await db.select().from(stripeProducts).where(eq(stripeProducts.active, 1));
+    const products = await db.select().from(stripeProducts).where(eq(stripeProducts.active, true));
     
     const productsWithPrices = await Promise.all(
       products.map(async (product) => {
@@ -62,9 +62,10 @@ export const stripeRouter = router({
           mode: price.interval ? "subscription" : "payment",
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
-          customer_email: ctx.user.email || undefined,
+          // Note: In Supabase, email is in auth.users, not profiles. 
+          // We might need to fetch it or pass it from frontend.
           metadata: {
-            userId: ctx.user.id.toString(),
+            userId: ctx.user.id,
           },
         });
 
@@ -76,7 +77,7 @@ export const stripeRouter = router({
     }),
 
   // Create checkout session for a specific quotation
-  createQuotationCheckoutSession: publicProcedure
+  createQuotationCheckoutSession: protectedProcedure
     .input(
       z.object({
         quotationId: z.string(),
@@ -84,19 +85,60 @@ export const stripeRouter = router({
         cancelUrl: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
-      
-      // Note: We would normally fetch the quotation from Supabase here
-      // But since we are in a tRPC router and Supabase is handled separately,
-      // we'll provide the logic that would be used.
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       
       try {
-        // This is a placeholder for the actual logic that will be implemented
-        // in a separate serverless function or integrated backend.
-        return { success: true, message: "Stripe integration ready for quotations" };
+        // Fetch quotation from new unified schema
+        const quotationResult = await db.select().from(quotations).where(
+          and(
+            eq(quotations.id, input.quotationId),
+            eq(quotations.userId, ctx.user.id)
+          )
+        ).limit(1);
+
+        if (quotationResult.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
+        }
+
+        const quotation = quotationResult[0];
+
+        // Create Stripe checkout session for the quotation
+        const session = await stripe!.checkout.sessions.create({
+          payment_method_types: ["card"],
+          line_items: [
+            {
+              price_data: {
+                currency: "eur",
+                product_data: {
+                  name: `Presupuesto: ${quotation.titulo}`,
+                  description: quotation.numeroPresupuesto,
+                },
+                unit_amount: Math.round(Number(quotation.precioTotal) * 100),
+              },
+              quantity: 1,
+            },
+          ],
+          mode: "payment",
+          success_url: input.successUrl,
+          cancel_url: input.cancelUrl,
+          metadata: {
+            userId: ctx.user.id,
+            quotationId: quotation.id,
+          },
+        });
+
+        // Update quotation with session ID
+        await db.update(quotations)
+          .set({ stripeSessionId: session.id })
+          .where(eq(quotations.id, quotation.id));
+
+        return { sessionId: session.id, url: session.url };
       } catch (error) {
         console.error("Stripe quotation checkout error:", error);
+        if (error instanceof TRPCError) throw error;
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create quotation checkout session" });
       }
     }),
