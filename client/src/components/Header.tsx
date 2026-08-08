@@ -1,10 +1,20 @@
 import { Button } from "@/components/ui/button";
 import { Menu, X, Zap } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -15,7 +25,13 @@ export default function Header() {
   };
 
   return (
-    <header className="fixed top-0 w-full bg-white/95 backdrop-blur-md z-50 border-b border-gray-200">
+    <header
+      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        isScrolled
+          ? "bg-[#102A66]/95 backdrop-blur-md shadow-lg border-b border-[#173B8F]/20"
+          : "bg-[#102A66]/90 backdrop-blur-sm border-b border-[#173B8F]/10"
+      }`}
+    >
       <nav className="container mx-auto px-4 py-4 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-2">
@@ -29,43 +45,43 @@ export default function Header() {
                 const parent = (e.target as HTMLElement).parentElement;
                 if (parent) {
                   const fallback = document.createElement('div');
-                  fallback.className = 'bg-[#1E3A8A] p-1.5 rounded-lg';
+                  fallback.className = 'bg-white/20 p-1.5 rounded-lg';
                   fallback.innerHTML = '<svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
                   parent.prepend(fallback);
                 }
               }}
             />
           ) : (
-            <div className="bg-[#1E3A8A] p-1.5 rounded-lg">
+            <div className="bg-white/20 p-1.5 rounded-lg">
               <Zap className="h-5 w-5 text-white" />
             </div>
           )}
-          <span className="text-xl font-bold text-[#1E3A8A]">Modira</span>
+          <span className="text-xl font-bold text-white">Modira</span>
         </div>
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8">
           <button
             onClick={() => scrollToSection("servicios")}
-            className="text-gray-700 hover:text-[#1E3A8A] transition-colors"
+            className="text-white/80 hover:text-white transition-colors font-medium"
           >
             Servicios
           </button>
           <button
             onClick={() => scrollToSection("faq")}
-            className="text-gray-700 hover:text-[#1E3A8A] transition-colors"
+            className="text-white/80 hover:text-white transition-colors font-medium"
           >
             FAQ
           </button>
           <a
             href="/area-cliente"
-            className="text-gray-700 hover:text-[#1E3A8A] transition-colors"
+            className="text-white/80 hover:text-white transition-colors font-medium"
           >
-            Área Cliente
+            Área de Clientes
           </a>
           <Button
             onClick={() => scrollToSection("auditoria")}
-            className="bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+            className="bg-white text-[#102A66] hover:bg-[#F4F6F9] font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
           >
             Auditoría Gratuita
           </Button>
@@ -73,7 +89,7 @@ export default function Header() {
 
         {/* Mobile Menu Button */}
         <button
-          className="md:hidden"
+          className="md:hidden text-white"
           onClick={() => setIsOpen(!isOpen)}
           aria-label="Toggle menu"
         >
@@ -83,28 +99,28 @@ export default function Header() {
 
       {/* Mobile Navigation */}
       {isOpen && (
-        <div className="md:hidden bg-white border-b border-gray-200 px-4 py-4 space-y-3">
+        <div className="md:hidden bg-[#102A66] border-b border-[#173B8F]/20 px-4 py-4 space-y-3 animate-in fade-in slide-in-from-top-2">
           <button
             onClick={() => scrollToSection("servicios")}
-            className="block w-full text-left py-2 text-gray-700 hover:text-[#1E3A8A]"
+            className="block w-full text-left py-2 text-white/80 hover:text-white font-medium transition-colors"
           >
             Servicios
           </button>
           <button
             onClick={() => scrollToSection("faq")}
-            className="block w-full text-left py-2 text-gray-700 hover:text-[#1E3A8A]"
+            className="block w-full text-left py-2 text-white/80 hover:text-white font-medium transition-colors"
           >
             FAQ
           </button>
           <a
             href="/area-cliente"
-            className="block w-full text-left py-2 text-gray-700 hover:text-[#1E3A8A]"
+            className="block w-full text-left py-2 text-white/80 hover:text-white font-medium transition-colors"
           >
-            Área Cliente
+            Área de Clientes
           </a>
           <Button
             onClick={() => scrollToSection("auditoria")}
-            className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white"
+            className="w-full bg-white text-[#102A66] hover:bg-[#F4F6F9] font-semibold"
           >
             Auditoría Gratuita
           </Button>

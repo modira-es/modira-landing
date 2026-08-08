@@ -43,21 +43,25 @@
 }
 
 :root {
-  /* Modira Brand Colors */
-  --modira-dark: #1E3A8A;
+  /* Modira Brand Colors - Premium Dark Blue */
+  --modira-primary: #173B8F;
+  --modira-dark: #102A66;
+  --modira-secondary: #2854B8;
   --modira-white: #FFFFFF;
-  --modira-light-gray: #F5F7FA;
-  --modira-soft-black: #1F2937;
+  --modira-bg-light: #F4F6F9;
+  --modira-bg-medium: #E8ECF2;
+  --modira-text-secondary: #52627A;
+  --modira-text-dark: #182230;
   
-  --primary: #1E3A8A;
+  --primary: #173B8F;
   --primary-foreground: #FFFFFF;
-  --sidebar-primary: #1E3A8A;
+  --sidebar-primary: #173B8F;
   --sidebar-primary-foreground: #FFFFFF;
-  --chart-1: #3B82F6;
-  --chart-2: #1E40AF;
-  --chart-3: #1E3A8A;
-  --chart-4: #1E3A8A;
-  --chart-5: #0C2340;
+  --chart-1: #2854B8;
+  --chart-2: #173B8F;
+  --chart-3: #102A66;
+  --chart-4: #173B8F;
+  --chart-5: #102A66;
   --radius: 0.65rem;
   --background: #FFFFFF;
   --foreground: #1F2937;
@@ -65,23 +69,23 @@
   --card-foreground: #1F2937;
   --popover: #FFFFFF;
   --popover-foreground: #1F2937;
-  --secondary: #F5F7FA;
-  --secondary-foreground: #1F2937;
-  --muted: #E5E7EB;
-  --muted-foreground: #6B7280;
-  --accent: #1E3A8A;
+  --secondary: #F4F6F9;
+  --secondary-foreground: #182230;
+  --muted: #E8ECF2;
+  --muted-foreground: #52627A;
+  --accent: #173B8F;
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
   --border: #E5E7EB;
   --input: #F3F4F6;
-  --ring: #1E3A8A;
+  --ring: #173B8F;
   --sidebar: #FFFFFF;
   --sidebar-foreground: #1F2937;
-  --sidebar-accent: #1E3A8A;
+  --sidebar-accent: #173B8F;
   --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #E5E7EB;
-  --sidebar-ring: #1E3A8A;
+  --sidebar-border: #E8ECF2;
+  --sidebar-ring: #173B8F;
 }
 
 .dark {
@@ -226,7 +230,7 @@
 }
 
 .modira-gradient {
-  @apply bg-gradient-to-br from-[#1E3A8A] via-[#1E3A8A] to-[#0C2340];
+  @apply bg-gradient-to-br from-[#102A66] via-[#173B8F] to-[#2854B8];
 }
 
 /* Smooth scroll behavior */
