@@ -4,7 +4,7 @@ import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import { getDb } from "../db";
 import { payments, stripePrices, stripeProducts, userSubscriptions, quotations } from "../../drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -172,6 +172,40 @@ export const stripeRouter = router({
 
     const userPayments = await db.select().from(payments).where(eq(payments.userId, ctx.user.id));
     return userPayments;
+  }),
+
+  getUserInvoices: protectedProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+    const invoices = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.userId, ctx.user.id))
+      .orderBy(desc(payments.createdAt));
+
+    return invoices.map((payment) => ({
+      id: payment.id,
+      invoiceNumber: payment.stripeInvoiceId,
+      companyId: null,
+      companyName: null,
+      clientId: payment.userId,
+      clientName: null,
+      projectId: null,
+      projectName: null,
+      status: payment.status,
+      issueDate: payment.createdAt,
+      dueDate: payment.dueDate,
+      subtotal: null,
+      tax: null,
+      discount: null,
+      total: payment.amount,
+      currency: payment.currency,
+      pdfUrl: null,
+      stripeInvoiceId: payment.stripeInvoiceId,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+    }));
   }),
 
   // Cancel subscription
