@@ -14,6 +14,9 @@ import QuotationView from "./pages/QuotationView";
 import ClientArea from "./pages/ClientArea";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Billing from "./pages/Billing";
+import Projects from "./pages/Projects";
+import Quotations from "./pages/Quotations";
+import Support from "./pages/Support";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookiePolicy from "./pages/CookiePolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -30,7 +33,10 @@ function Router() {
       <Route path="/admin/presupuestos" component={AdminQuotations} />
       <Route path="/presupuesto/:id" component={QuotationView} />
       <Route path="/area-cliente" component={() => <ProtectedRoute><ClientArea /></ProtectedRoute>} />
-      <Route path="/area-cliente/facturacion" component={Billing} />
+      <Route path="/area-cliente/proyectos" component={() => <ProtectedRoute><Projects /></ProtectedRoute>} />
+      <Route path="/area-cliente/presupuestos" component={() => <ProtectedRoute><Quotations /></ProtectedRoute>} />
+      <Route path="/area-cliente/facturacion" component={() => <ProtectedRoute><Billing /></ProtectedRoute>} />
+      <Route path="/area-cliente/soporte" component={() => <ProtectedRoute><Support /></ProtectedRoute>} />
       <Route path="/politica-privacidad" component={PrivacyPolicy} />
       <Route path="/politica-cookies" component={CookiePolicy} />
       <Route path="/terminos" component={TermsOfService} />

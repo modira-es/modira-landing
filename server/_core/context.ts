@@ -20,26 +20,36 @@ export async function createContext(
     const user = await verifySupabaseToken(token);
 
     if (user) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      
-      if (!error && data) {
-        profile = {
-          ...data,
-          // Map snake_case from Supabase to camelCase expected by Profile type if necessary
-          // However, Drizzle schema seems to use some snake_case fields as well.
-          // Let's ensure types match or cast.
-          companyId: data.company_id,
-          avatarUrl: data.avatar_url,
-          fechaRegistro: data.fecha_registro,
-          fechaUltimoLogin: data.fecha_ultimo_login,
-          lastSeenAt: data.last_seen_at,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        } as any;
+      // Create a basic profile from auth user even if DB profile fetch fails
+      profile = {
+        id: user.id,
+        email: user.email,
+        rol: user.user_metadata?.rol || 'user',
+        nombre: user.user_metadata?.nombre || user.email?.split('@')[0] || 'Usuario',
+      } as any;
+
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        
+        if (!error && data) {
+          profile = {
+            ...profile,
+            ...data,
+            companyId: data.company_id,
+            avatarUrl: data.avatar_url,
+            fechaRegistro: data.fecha_registro,
+            fechaUltimoLogin: data.fecha_ultimo_login,
+            lastSeenAt: data.last_seen_at,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          } as any;
+        }
+      } catch (err) {
+        console.warn("[tRPC Context] Error fetching profile from DB:", err);
       }
     }
   }

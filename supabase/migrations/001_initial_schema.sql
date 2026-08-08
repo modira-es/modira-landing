@@ -629,7 +629,14 @@ FOR SELECT
 TO authenticated
 USING (
     id = auth.uid()
-    OR company_id = public.current_user_company_id()
+    OR (
+        company_id IS NOT NULL 
+        AND company_id IN (
+            SELECT p.company_id 
+            FROM public.profiles p 
+            WHERE p.id = auth.uid()
+        )
+    )
 );
 
 CREATE POLICY profiles_insert

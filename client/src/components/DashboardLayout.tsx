@@ -20,7 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Zap, FileText, CreditCard, AlertCircle } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -28,7 +28,10 @@ import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Inicio", path: "/area-cliente" },
-  { icon: Users, label: "Facturación", path: "/area-cliente/facturacion" },
+  { icon: Zap, label: "Proyectos", path: "/area-cliente/proyectos" },
+  { icon: FileText, label: "Presupuestos", path: "/area-cliente/presupuestos" },
+  { icon: CreditCard, label: "Facturación", path: "/area-cliente/facturacion" },
+  { icon: AlertCircle, label: "Soporte", path: "/area-cliente/soporte" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
