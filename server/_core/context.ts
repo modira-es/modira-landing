@@ -1,9 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { Profile } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { eq } from "drizzle-orm";
-import { profiles } from "../../drizzle/schema";
-import { verifySupabaseToken } from "../lib/supabase";
+import type { Profile } from "../../shared/types";
+import { verifySupabaseToken, supabase } from "../lib/supabase";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -23,17 +20,26 @@ export async function createContext(
     const user = await verifySupabaseToken(token);
 
     if (user) {
-      const db = await getDb();
-      if (db) {
-        const result = await db
-          .select()
-          .from(profiles)
-          .where(eq(profiles.id, user.id))
-          .limit(1);
-        
-        if (result.length > 0) {
-          profile = result[0];
-        }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      
+      if (!error && data) {
+        profile = {
+          ...data,
+          // Map snake_case from Supabase to camelCase expected by Profile type if necessary
+          // However, Drizzle schema seems to use some snake_case fields as well.
+          // Let's ensure types match or cast.
+          companyId: data.company_id,
+          avatarUrl: data.avatar_url,
+          fechaRegistro: data.fecha_registro,
+          fechaUltimoLogin: data.fecha_ultimo_login,
+          lastSeenAt: data.last_seen_at,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        } as any;
       }
     }
   }

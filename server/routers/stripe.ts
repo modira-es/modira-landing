@@ -2,9 +2,7 @@ import { TRPCError } from "@trpc/server";
 import Stripe from "stripe";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { z } from "zod";
-import { getDb } from "../db";
-import { payments, stripePrices, stripeProducts, userSubscriptions, quotations } from "../../drizzle/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { supabase } from "../lib/supabase";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -13,15 +11,26 @@ const stripe = process.env.STRIPE_SECRET_KEY
 export const stripeRouter = router({
   // Get all active products and prices
   getProducts: publicProcedure.query(async () => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const { data: products, error: productsError } = await supabase
+      .from("stripe_products")
+      .select("*")
+      .eq("active", true);
 
-    const products = await db.select().from(stripeProducts).where(eq(stripeProducts.active, true));
-    
+    if (productsError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Error fetching products" });
+
     const productsWithPrices = await Promise.all(
-      products.map(async (product) => {
-        const prices = await db.select().from(stripePrices).where(eq(stripePrices.stripeProductId, product.stripeProductId));
-        return { ...product, prices };
+      (products || []).map(async (product) => {
+        const { data: prices, error: pricesError } = await supabase
+          .from("stripe_prices")
+          .select("*")
+          .eq("stripe_product_id", product.stripe_product_id);
+        
+        if (pricesError) console.error("Error fetching prices for product", product.id, pricesError);
+        return { 
+          ...product, 
+          stripeProductId: product.stripe_product_id, // Map for frontend compatibility
+          prices: (prices || []).map(p => ({ ...p, stripePriceId: p.stripe_price_id })) 
+        };
       })
     );
 
@@ -39,16 +48,19 @@ export const stripeRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       // Get price details
-      const priceDetails = await db.select().from(stripePrices).where(eq(stripePrices.stripePriceId, input.priceId));
-      if (!priceDetails.length) {
+      const { data: priceDetails, error: priceError } = await supabase
+        .from("stripe_prices")
+        .select("*")
+        .eq("stripe_price_id", input.priceId)
+        .single();
+
+      if (priceError || !priceDetails) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Price not found" });
       }
 
-      const price = priceDetails[0];
+      const price = priceDetails;
 
       try {
         const session = await stripe!.checkout.sessions.create({
@@ -87,23 +99,25 @@ export const stripeRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       
       try {
         // Fetch quotation from new unified schema
-        const quotationResult = await db.select().from(quotations).where(
-          and(
-            eq(quotations.id, input.quotationId),
-            ctx.user.companyId ? eq(quotations.companyId, ctx.user.companyId) : eq(quotations.userId, ctx.user.id)
-          )
-        ).limit(1);
-
-        if (quotationResult.length === 0) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
+        let query = supabase
+          .from("quotations")
+          .select("*")
+          .eq("id", input.quotationId);
+        
+        if (ctx.user.companyId) {
+          query = query.eq("company_id", ctx.user.companyId);
+        } else {
+          query = query.eq("user_id", ctx.user.id);
         }
 
-        const quotation = quotationResult[0];
+        const { data: quotation, error: quotationError } = await query.single();
+
+        if (quotationError || !quotation) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
+        }
 
         // Create Stripe checkout session for the quotation
         const session = await stripe!.checkout.sessions.create({
@@ -114,9 +128,9 @@ export const stripeRouter = router({
                 currency: "eur",
                 product_data: {
                   name: `Presupuesto: ${quotation.titulo}`,
-                  description: quotation.numeroPresupuesto,
+                  description: quotation.numero_presupuesto,
                 },
-                unit_amount: Math.round(Number(quotation.precioTotal) * 100),
+                unit_amount: Math.round(Number(quotation.precio_total) * 100),
               },
               quantity: 1,
             },
@@ -131,9 +145,10 @@ export const stripeRouter = router({
         });
 
         // Update quotation with session ID
-        await db.update(quotations)
-          .set({ stripeSessionId: session.id })
-          .where(eq(quotations.id, quotation.id));
+        await supabase
+          .from("quotations")
+          .update({ stripe_session_id: session.id, updated_at: new Date().toISOString() })
+          .eq("id", quotation.id);
 
         return { sessionId: session.id, url: session.url };
       } catch (error) {
@@ -145,19 +160,38 @@ export const stripeRouter = router({
 
   // Get user subscriptions
   getUserSubscriptions: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const { data: subs, error: subsError } = await supabase
+      .from("user_subscriptions")
+      .select("*")
+      .eq("user_id", ctx.user.id);
 
-    const subs = await db.select().from(userSubscriptions).where(eq(userSubscriptions.userId, ctx.user.id));
+    if (subsError) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Error fetching subscriptions" });
     
     const subsWithDetails = await Promise.all(
-      subs.map(async (sub) => {
-        const price = await db.select().from(stripePrices).where(eq(stripePrices.stripePriceId, sub.stripePriceId));
-        const product = price.length ? await db.select().from(stripeProducts).where(eq(stripeProducts.stripeProductId, price[0].stripeProductId)) : [];
+      (subs || []).map(async (sub) => {
+        const { data: price } = await supabase
+          .from("stripe_prices")
+          .select("*")
+          .eq("stripe_price_id", sub.stripe_price_id)
+          .single();
+        
+        const product = price ? await supabase
+          .from("stripe_products")
+          .select("*")
+          .eq("stripe_product_id", price.stripe_product_id)
+          .single() : { data: null };
+
         return {
           ...sub,
-          price: price[0],
-          product: product[0],
+          stripeSubscriptionId: sub.stripe_subscription_id,
+          stripePriceId: sub.stripe_price_id,
+          currentPeriodStart: sub.current_period_start,
+          currentPeriodEnd: sub.current_period_end,
+          canceledAt: sub.canceled_at,
+          createdAt: sub.created_at,
+          updatedAt: sub.updated_at,
+          price: price ? { ...price, stripePriceId: price.stripe_price_id } : null,
+          product: product.data ? { ...product.data, stripeProductId: product.data.stripe_product_id } : null,
         };
       })
     );
@@ -167,55 +201,68 @@ export const stripeRouter = router({
 
   // Get user payments/invoices
   getUserPayments: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    let query = supabase
+      .from("payments")
+      .select("*");
+    
+    if (ctx.user.companyId) {
+      query = query.eq("company_id", ctx.user.companyId);
+    } else {
+      query = query.eq("user_id", ctx.user.id);
+    }
 
-    const userPayments = await db
-      .select()
-      .from(payments)
-      .where(
-        ctx.user.companyId 
-          ? eq(payments.companyId, ctx.user.companyId) 
-          : eq(payments.userId, ctx.user.id)
-      );
-    return userPayments;
+    const { data: userPayments, error } = await query;
+    if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Error fetching payments" });
+
+    return (userPayments || []).map(p => ({
+      ...p,
+      userId: p.user_id,
+      companyId: p.company_id,
+      stripeInvoiceId: p.stripe_invoice_id,
+      stripePaymentIntentId: p.stripe_payment_intent_id,
+      paidAt: p.paid_at,
+      dueDate: p.due_date,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+    }));
   }),
 
   getUserInvoices: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    let query = supabase
+      .from("payments")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (ctx.user.companyId) {
+      query = query.eq("company_id", ctx.user.companyId);
+    } else {
+      query = query.eq("user_id", ctx.user.id);
+    }
 
-    const invoices = await db
-      .select()
-      .from(payments)
-      .where(
-        ctx.user.companyId 
-          ? eq(payments.companyId, ctx.user.companyId) 
-          : eq(payments.userId, ctx.user.id)
-      )
-      .orderBy(desc(payments.createdAt));
+    const { data: invoices, error } = await query;
+    if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Error fetching invoices" });
 
-    return invoices.map((payment) => ({
+    return (invoices || []).map((payment) => ({
       id: payment.id,
-      invoiceNumber: payment.stripeInvoiceId,
-      companyId: payment.companyId,
+      invoiceNumber: payment.stripe_invoice_id,
+      companyId: payment.company_id,
       companyName: null,
-      clientId: payment.userId,
+      clientId: payment.user_id,
       clientName: null,
       projectId: null,
       projectName: null,
       status: payment.status,
-      issueDate: payment.createdAt,
-      dueDate: payment.dueDate,
+      issueDate: payment.created_at,
+      dueDate: payment.due_date,
       subtotal: null,
       tax: null,
       discount: null,
       total: payment.amount,
       currency: payment.currency,
       pdfUrl: null,
-      stripeInvoiceId: payment.stripeInvoiceId,
-      createdAt: payment.createdAt,
-      updatedAt: payment.updatedAt,
+      stripeInvoiceId: payment.stripe_invoice_id,
+      createdAt: payment.created_at,
+      updatedAt: payment.updated_at,
     }));
   }),
 
@@ -223,12 +270,16 @@ export const stripeRouter = router({
   cancelSubscription: protectedProcedure
     .input(z.object({ subscriptionId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
 
       // Verify subscription belongs to user
-      const sub = await db.select().from(userSubscriptions).where(eq(userSubscriptions.stripeSubscriptionId, input.subscriptionId));
-      if (!sub.length || sub[0].userId !== ctx.user.id) {
+      const { data: sub, error: subError } = await supabase
+        .from("user_subscriptions")
+        .select("*")
+        .eq("stripe_subscription_id", input.subscriptionId)
+        .single();
+
+      if (subError || !sub || sub.user_id !== ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Subscription not found" });
       }
 
@@ -238,10 +289,14 @@ export const stripeRouter = router({
         });
 
         // Update database
-        await db
-          .update(userSubscriptions)
-          .set({ status: canceled.status, canceledAt: new Date() })
-          .where(eq(userSubscriptions.stripeSubscriptionId, input.subscriptionId));
+        await supabase
+          .from("user_subscriptions")
+          .update({ 
+            status: canceled.status, 
+            canceled_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("stripe_subscription_id", input.subscriptionId);
 
         return { success: true };
       } catch (error) {
@@ -254,23 +309,35 @@ export const stripeRouter = router({
   getPaymentDetails: protectedProcedure
     .input(z.object({ paymentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const { data: payment, error } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("stripe_invoice_id", input.paymentId)
+        .single();
 
-      const payment = await db.select().from(payments).where(eq(payments.stripeInvoiceId, input.paymentId));
-      if (!payment.length) {
+      if (error || !payment) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Payment not found" });
       }
 
       // Check access: either by company or by user
       const hasAccess = ctx.user.companyId 
-        ? payment[0].companyId === ctx.user.companyId 
-        : payment[0].userId === ctx.user.id;
+        ? payment.company_id === ctx.user.companyId 
+        : payment.user_id === ctx.user.id;
 
       if (!hasAccess) {
         throw new TRPCError({ code: "FORBIDDEN", message: "No tienes permiso para ver este pago" });
       }
 
-      return payment[0];
+      return {
+        ...payment,
+        userId: payment.user_id,
+        companyId: payment.company_id,
+        stripeInvoiceId: payment.stripe_invoice_id,
+        stripePaymentIntentId: payment.stripe_payment_intent_id,
+        paidAt: payment.paid_at,
+        dueDate: payment.due_date,
+        createdAt: payment.created_at,
+        updatedAt: payment.updated_at,
+      };
     }),
 });

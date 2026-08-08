@@ -1,11 +1,7 @@
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import {
-  getAllUsers,
-  updateUserRole,
-  updateUserStatus,
-} from "../db";
+import { supabase } from "../lib/supabase";
 
 /**
  * Admin-only procedure that checks if user is admin
@@ -24,19 +20,23 @@ export const adminRouter = router({
   // Get all users
   getUsers: adminProcedure.query(async () => {
     try {
-      const users = await getAllUsers();
-      return users.map((user) => ({
+      const { data: users, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (users || []).map((user) => ({
         id: user.id,
         name: user.nombre,
-        email: user.id, // Note: In Supabase, email is in auth.users. 
-        // We might need a join or just use id as placeholder for now.
-        // Actually, the user profile might not have email.
+        email: user.id, 
         company: user.empresa,
-        companyId: user.companyId,
+        companyId: user.company_id,
         role: user.rol,
         status: user.status,
-        createdAt: user.createdAt,
-        lastSignedIn: user.fechaUltimoLogin,
+        createdAt: user.created_at,
+        lastSignedIn: user.fecha_ultimo_login,
       }));
     } catch (error) {
       console.error("Error getting users:", error);
@@ -57,7 +57,13 @@ export const adminRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        await updateUserRole(input.userId, input.role);
+        const { error } = await supabase
+          .from("profiles")
+          .update({ rol: input.role, updated_at: new Date().toISOString() })
+          .eq("id", input.userId);
+
+        if (error) throw error;
+
         return {
           success: true,
           message: "Rol actualizado exitosamente",
@@ -81,7 +87,13 @@ export const adminRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
-        await updateUserStatus(input.userId, input.status);
+        const { error } = await supabase
+          .from("profiles")
+          .update({ status: input.status, updated_at: new Date().toISOString() })
+          .eq("id", input.userId);
+
+        if (error) throw error;
+
         return {
           success: true,
           message: "Estado actualizado exitosamente",
@@ -98,11 +110,16 @@ export const adminRouter = router({
   // Get user statistics
   getStatistics: adminProcedure.query(async () => {
     try {
-      const users = await getAllUsers();
-      const totalUsers = users.length;
-      const activeUsers = users.filter((u) => u.status === "active").length;
-      const blockedUsers = users.filter((u) => u.status === "blocked").length;
-      const adminUsers = users.filter((u) => u.rol === "admin").length;
+      const { data: users, error } = await supabase
+        .from("profiles")
+        .select("status, rol");
+
+      if (error) throw error;
+
+      const totalUsers = users?.length || 0;
+      const activeUsers = users?.filter((u) => u.status === "active").length || 0;
+      const blockedUsers = users?.filter((u) => u.status === "blocked").length || 0;
+      const adminUsers = users?.filter((u) => u.rol === "admin").length || 0;
 
       return {
         totalUsers,
