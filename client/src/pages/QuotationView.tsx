@@ -34,8 +34,16 @@ export default function QuotationView() {
   }, [id, user, authLoading]);
 
   const fetchQuotation = async () => {
+    if (!user) return;
     setLoading(true);
     try {
+      // Get user profile to check company_id
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id, rol")
+        .eq("id", user.id)
+        .single();
+
       const { data, error } = await supabase
         .from("quotations")
         .select("*")
@@ -43,6 +51,21 @@ export default function QuotationView() {
         .single();
 
       if (error) throw error;
+
+      // Access control:
+      // 1. If user is admin, allow.
+      // 2. If user has company_id, it must match quotation's company_id.
+      // 3. Otherwise, user_id must match.
+      const isAdmin = profileData?.rol === "admin";
+      const hasCompanyAccess = profileData?.company_id && data.company_id === profileData.company_id;
+      const isOwner = data.user_id === user.id;
+
+      if (!isAdmin && !hasCompanyAccess && !isOwner) {
+        console.error("Access denied to quotation");
+        setQuotation(null);
+        return;
+      }
+
       setQuotation(data);
     } catch (error) {
       console.error("Error fetching quotation:", error);

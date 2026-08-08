@@ -32,6 +32,7 @@ export const adminRouter = router({
         // We might need a join or just use id as placeholder for now.
         // Actually, the user profile might not have email.
         company: user.empresa,
+        companyId: user.companyId,
         role: user.rol,
         status: user.status,
         createdAt: user.createdAt,

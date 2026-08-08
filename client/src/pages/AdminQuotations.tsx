@@ -40,15 +40,28 @@ export default function AdminQuotations() {
   }, [user, authLoading]);
 
   const fetchQuotations = async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // First get the admin's profile to know their company_id
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      let query = supabase
         .from("quotations")
         .select(`
           *,
           profiles:user_id (nombre, empresa)
-        `)
-        .order("created_at", { ascending: false });
+        `);
+      
+      if (profileData?.company_id) {
+        query = query.eq("company_id", profileData.company_id);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
       setQuotations(data || []);

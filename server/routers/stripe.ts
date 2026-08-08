@@ -95,7 +95,7 @@ export const stripeRouter = router({
         const quotationResult = await db.select().from(quotations).where(
           and(
             eq(quotations.id, input.quotationId),
-            eq(quotations.userId, ctx.user.id)
+            ctx.user.companyId ? eq(quotations.companyId, ctx.user.companyId) : eq(quotations.userId, ctx.user.id)
           )
         ).limit(1);
 
@@ -170,7 +170,14 @@ export const stripeRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-    const userPayments = await db.select().from(payments).where(eq(payments.userId, ctx.user.id));
+    const userPayments = await db
+      .select()
+      .from(payments)
+      .where(
+        ctx.user.companyId 
+          ? eq(payments.companyId, ctx.user.companyId) 
+          : eq(payments.userId, ctx.user.id)
+      );
     return userPayments;
   }),
 
@@ -181,13 +188,17 @@ export const stripeRouter = router({
     const invoices = await db
       .select()
       .from(payments)
-      .where(eq(payments.userId, ctx.user.id))
+      .where(
+        ctx.user.companyId 
+          ? eq(payments.companyId, ctx.user.companyId) 
+          : eq(payments.userId, ctx.user.id)
+      )
       .orderBy(desc(payments.createdAt));
 
     return invoices.map((payment) => ({
       id: payment.id,
       invoiceNumber: payment.stripeInvoiceId,
-      companyId: null,
+      companyId: payment.companyId,
       companyName: null,
       clientId: payment.userId,
       clientName: null,
@@ -247,8 +258,17 @@ export const stripeRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       const payment = await db.select().from(payments).where(eq(payments.stripeInvoiceId, input.paymentId));
-      if (!payment.length || payment[0].userId !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Payment not found" });
+      if (!payment.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Payment not found" });
+      }
+
+      // Check access: either by company or by user
+      const hasAccess = ctx.user.companyId 
+        ? payment[0].companyId === ctx.user.companyId 
+        : payment[0].userId === ctx.user.id;
+
+      if (!hasAccess) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "No tienes permiso para ver este pago" });
       }
 
       return payment[0];

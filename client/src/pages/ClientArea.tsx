@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 
 interface UserProfile {
   id: string;
+  company_id: string | null;
   nombre: string;
   empresa: string | null;
   telefono: string | null;

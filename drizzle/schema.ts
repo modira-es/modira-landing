@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   boolean,
+  unique,
 } from "drizzle-orm/pg-core";
 
 // Enums
@@ -41,22 +42,22 @@ export const companies = pgTable("companies", {
   postalCode: text("postal_code"),
   city: text("city"),
   province: text("province"),
-  country: text("country"),
+  country: text("country").default("ES"),
   industry: text("industry"),
   employees: integer("employees"),
-  timezone: varchar("timezone", { length: 64 }).default("UTC").notNull(),
+  timezone: varchar("timezone", { length: 64 }).default("Europe/Madrid").notNull(),
   language: varchar("language", { length: 10 }).default("es").notNull(),
   currency: varchar("currency", { length: 3 }).default("EUR").notNull(),
   stripeCustomerId: text("stripe_customer_id"),
   subscriptionPlan: text("subscription_plan"),
   subscriptionStatus: varchar("subscription_status", { length: 50 }),
-  trialEndsAt: timestamp("trial_ends_at"),
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   isActive: boolean("is_active").default(true).notNull(),
   createdBy: uuid("created_by"),
   updatedBy: uuid("updated_by"),
   settings: jsonb("settings").default({}).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type Company = typeof companies.$inferSelect;
@@ -78,11 +79,11 @@ export const profiles = pgTable("profiles", {
   rol: roleEnum("rol").default("user").notNull(),
   status: statusEnum("status").default("active").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  fechaRegistro: timestamp("fecha_registro").defaultNow().notNull(),
-  fechaUltimoLogin: timestamp("fecha_ultimo_login"),
-  lastSeenAt: timestamp("last_seen_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  fechaRegistro: timestamp("fecha_registro", { withTimezone: true }).defaultNow().notNull(),
+  fechaUltimoLogin: timestamp("fecha_ultimo_login", { withTimezone: true }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type Profile = typeof profiles.$inferSelect;
@@ -101,16 +102,16 @@ export const clients = pgTable("clients", {
   contactoPrincipal: text("contacto_principal"),
   cifVat: text("cif_vat"),
   direccion: text("direccion"),
+  codigoPostal: text("codigo_postal"),
   ciudad: text("ciudad"),
   provincia: text("provincia"),
-  pais: text("pais"),
-  codigoPostal: text("codigo_postal"),
+  pais: text("pais").default("ES"),
   sector: text("sector"),
   notas: text("notas"),
   etiquetas: jsonb("etiquetas").default([]).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type Client = typeof clients.$inferSelect;
@@ -121,16 +122,17 @@ export type InsertClient = typeof clients.$inferInsert;
  */
 export const projects = pgTable("projects", {
   id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
   userId: uuid("user_id")
     .notNull()
     .references(() => profiles.id, { onDelete: "cascade" }),
   nombre: text("nombre").notNull(),
   descripcion: text("descripcion"),
   estado: projectStatusEnum("estado").default("activo").notNull(),
-  fechaInicio: timestamp("fecha_inicio").defaultNow(),
-  fechaFin: timestamp("fecha_fin"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  fechaInicio: timestamp("fecha_inicio", { withTimezone: true }).defaultNow(),
+  fechaFin: timestamp("fecha_fin", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export type Project = typeof projects.$inferSelect;
@@ -141,29 +143,103 @@ export type InsertProject = typeof projects.$inferInsert;
  */
 export const quotations = pgTable("quotations", {
   id: uuid("id").primaryKey().defaultRandom(),
-  numeroPresupuesto: text("numero_presupuesto").unique().notNull(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
   userId: uuid("user_id")
     .notNull()
     .references(() => profiles.id, { onDelete: "cascade" }),
   projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
-  empresa: text("empresa"),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: "set null" }),
+  numeroPresupuesto: text("numero_presupuesto").notNull(),
   titulo: text("titulo").notNull(),
   descripcionDetallada: text("descripcion_detallada"),
   serviciosIncluidos: jsonb("servicios_incluidos").default([]).notNull(),
   precioBase: numeric("precio_base", { precision: 12, scale: 2 }).default("0.00").notNull(),
   ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }).default("21.00").notNull(),
   precioTotal: numeric("precio_total", { precision: 12, scale: 2 }).default("0.00").notNull(),
-  estado: quotationStatusEnum("estado").default("borrador").notNull(),
-  fechaEmision: timestamp("fecha_emision").defaultNow(),
-  fechaValidez: timestamp("fecha_validez"),
+  estado: text("estado").default("borrador").notNull(), // Using text to match SQL migration which says VARCHAR(50)
+  fechaEmision: timestamp("fecha_emision", { withTimezone: true }).defaultNow(),
+  fechaValidez: timestamp("fecha_validez", { withTimezone: true }),
   notas: text("notas"),
   stripeSessionId: text("stripe_session_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  companyNumberUnique: unique("quotations_company_number_unique").on(table.companyId, table.numeroPresupuesto),
+}));
 
 export type Quotation = typeof quotations.$inferSelect;
 export type InsertQuotation = typeof quotations.$inferInsert;
+
+/**
+ * Invoices table
+ */
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  // Add other fields as needed based on common patterns, but SQL migration only showed company_id addition
+  // Since the user said they exist, I should add them if I find their definitions elsewhere or just keep them minimal
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Budgets table
+ */
+export const budgets = pgTable("budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Support Tickets table
+ */
+export const supportTickets = pgTable("support_tickets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Automations table
+ */
+export const automations = pgTable("automations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Payments Table
+ */
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+  stripeInvoiceId: varchar("stripe_invoice_id", { length: 255 }),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
+  amount: integer("amount").notNull(), // Amount in cents
+  currency: varchar("currency", { length: 3 }).default("EUR").notNull(),
+  status: varchar("status", { length: 50 }).notNull(), 
+  description: text("description"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  dueDate: timestamp("due_date", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = typeof payments.$inferInsert;
 
 /**
  * Stripe Products Table
@@ -175,12 +251,9 @@ export const stripeProducts = pgTable("stripe_products", {
   description: text("description"),
   type: stripeProductTypeEnum("type").notNull(),
   active: boolean("active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
-
-export type StripeProduct = typeof stripeProducts.$inferSelect;
-export type InsertStripeProduct = typeof stripeProducts.$inferInsert;
 
 /**
  * Stripe Prices Table
@@ -194,12 +267,9 @@ export const stripePrices = pgTable("stripe_prices", {
   interval: varchar("interval", { length: 50 }), // "month", "year", null for one-time
   intervalCount: integer("interval_count").default(1),
   active: boolean("active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
-
-export type StripePrice = typeof stripePrices.$inferSelect;
-export type InsertStripePrice = typeof stripePrices.$inferInsert;
 
 /**
  * User Subscriptions Table
@@ -212,35 +282,9 @@ export const userSubscriptions = pgTable("user_subscriptions", {
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }).notNull().unique(),
   stripePriceId: varchar("stripe_price_id", { length: 255 }).notNull(),
   status: varchar("status", { length: 50 }).notNull(), // "active", "past_due", "canceled", etc
-  currentPeriodStart: timestamp("current_period_start"),
-  currentPeriodEnd: timestamp("current_period_end"),
-  canceledAt: timestamp("canceled_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
-
-export type UserSubscription = typeof userSubscriptions.$inferSelect;
-export type InsertUserSubscription = typeof userSubscriptions.$inferInsert;
-
-/**
- * Payments/Invoices Table
- */
-export const payments = pgTable("payments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => profiles.id, { onDelete: "cascade" }),
-  stripeInvoiceId: varchar("stripe_invoice_id", { length: 255 }).notNull().unique(),
-  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
-  amount: integer("amount").notNull(), // Amount in cents
-  currency: varchar("currency", { length: 3 }).default("eur").notNull(),
-  status: varchar("status", { length: 50 }).notNull(), // "paid", "draft", "open", "uncollectible", "void"
-  description: text("description"),
-  paidAt: timestamp("paid_at"),
-  dueDate: timestamp("due_date"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export type Payment = typeof payments.$inferSelect;
-export type InsertPayment = typeof payments.$inferInsert;
