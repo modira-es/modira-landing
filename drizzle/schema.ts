@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 // Enums
-export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const roleEnum = pgEnum("role", ["user", "owner", "admin", "manager", "employee"]);
 export const statusEnum = pgEnum("status", ["active", "pending", "blocked"]);
 export const projectStatusEnum = pgEnum("project_status", ["activo", "pausado", "completado"]);
 export const quotationStatusEnum = pgEnum("quotation_status", [
@@ -25,23 +25,96 @@ export const quotationStatusEnum = pgEnum("quotation_status", [
 export const stripeProductTypeEnum = pgEnum("stripe_product_type", ["one_time", "subscription"]);
 
 /**
+ * Companies table for multi-tenant SaaS customers
+ */
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyCode: varchar("company_code", { length: 50 }).notNull().unique(),
+  companyName: text("company_name").notNull(),
+  legalName: text("legal_name"),
+  cifVat: text("cif_vat"),
+  billingEmail: varchar("billing_email", { length: 320 }),
+  phone: text("phone"),
+  website: text("website"),
+  logoUrl: text("logo_url"),
+  address: text("address"),
+  postalCode: text("postal_code"),
+  city: text("city"),
+  province: text("province"),
+  country: text("country"),
+  industry: text("industry"),
+  employees: integer("employees"),
+  timezone: varchar("timezone", { length: 64 }).default("UTC").notNull(),
+  language: varchar("language", { length: 10 }).default("es").notNull(),
+  currency: varchar("currency", { length: 3 }).default("EUR").notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  subscriptionPlan: text("subscription_plan"),
+  subscriptionStatus: varchar("subscription_status", { length: 50 }),
+  trialEndsAt: timestamp("trial_ends_at"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: uuid("created_by"),
+  updatedBy: uuid("updated_by"),
+  settings: jsonb("settings").default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = typeof companies.$inferInsert;
+
+/**
  * Profiles table linked to Supabase Auth users
  */
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey().notNull(), // Linked to auth.users.id
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
   nombre: text("nombre").notNull(),
+  apellidos: text("apellidos"),
   empresa: text("empresa"),
   telefono: text("telefono"),
+  avatarUrl: text("avatar_url"),
+  puesto: text("puesto"),
+  departamento: text("departamento"),
   rol: roleEnum("rol").default("user").notNull(),
   status: statusEnum("status").default("active").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
   fechaRegistro: timestamp("fecha_registro").defaultNow().notNull(),
   fechaUltimoLogin: timestamp("fecha_ultimo_login"),
+  lastSeenAt: timestamp("last_seen_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type Profile = typeof profiles.$inferSelect;
 export type InsertProfile = typeof profiles.$inferInsert;
+
+/**
+ * Clients table for company customer records
+ */
+export const clients = pgTable("clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
+  nombre: text("nombre").notNull(),
+  empresa: text("empresa"),
+  email: varchar("email", { length: 320 }),
+  telefono: text("telefono"),
+  contactoPrincipal: text("contacto_principal"),
+  cifVat: text("cif_vat"),
+  direccion: text("direccion"),
+  ciudad: text("ciudad"),
+  provincia: text("provincia"),
+  pais: text("pais"),
+  codigoPostal: text("codigo_postal"),
+  sector: text("sector"),
+  notas: text("notas"),
+  etiquetas: jsonb("etiquetas").default([]).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;
 
 /**
  * Projects table
