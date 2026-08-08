@@ -4,14 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { trpc } from "@/lib/trpc";
 import { Loader2, AlertCircle, Filter, Plus, Search } from "lucide-react";
 import { useInvoices } from "@/hooks/useInvoices";
 import { InvoiceTable, SortKey } from "@/components/invoices/InvoiceTable";
 import { InvoiceStatus } from "@/types/invoice";
-import { getInvoiceStatusConfig, formatDate } from "@/services/invoices";
 import { CardAction } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 
 const statusOptions: { value: InvoiceStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos" },
@@ -110,9 +107,11 @@ export default function Billing() {
       setSelectedInvoiceIds((current) => current.filter((id) => !pageInvoices.some((invoice) => invoice.id === id)));
       return;
     }
-    setSelectedInvoiceIds((current) => [
-      ...new Set([...current, ...pageInvoices.map((invoice) => invoice.id)]),
-    ]);
+    setSelectedInvoiceIds((current) => {
+      const nextSelection = new Set(current);
+      pageInvoices.forEach((invoice) => nextSelection.add(invoice.id));
+      return Array.from(nextSelection);
+    });
   };
 
   const onToggleSelect = (invoiceId: string) => {

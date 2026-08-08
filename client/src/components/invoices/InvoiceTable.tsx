@@ -1,5 +1,4 @@
 import {
-  ArrowUpDown,
   CheckCircle2,
   Copy,
   Download,
@@ -171,7 +170,8 @@ export function InvoiceTable({
                 e.preventDefault();
                 if (currentPage > 1) onPageChange(currentPage - 1);
               }}
-              disabled={currentPage === 1}
+              aria-disabled={currentPage === 1}
+              className={currentPage === 1 ? "opacity-40 pointer-events-none" : undefined}
             />
             {Array.from({ length: totalPages }, (_, index) => (
               <PaginationItem key={index}>
@@ -192,7 +192,8 @@ export function InvoiceTable({
                 e.preventDefault();
                 if (currentPage < totalPages) onPageChange(currentPage + 1);
               }}
-              disabled={currentPage === totalPages}
+              aria-disabled={currentPage === totalPages}
+              className={currentPage === totalPages ? "opacity-40 pointer-events-none" : undefined}
             />
           </PaginationContent>
         </Pagination>
