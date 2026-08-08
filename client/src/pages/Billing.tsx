@@ -140,46 +140,49 @@ export default function Billing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-[#1E3A8A]">Facturación</h1>
-          <p className="text-gray-600 max-w-3xl">
-            Gestiona tus facturas de forma clara y rápida, con control total sobre estados,
-            clientes y fechas de pago.
-          </p>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-[#102A66] to-[#173B8F] text-white py-8">
+        <div className="container mx-auto px-4">
+          <h1 className="text-4xl font-bold">Facturación</h1>
+          <p className="text-white/80 mt-2">Descarga tus facturas y gestiona tus métodos de pago</p>
         </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto space-y-6 p-6">
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <Button
               variant={activeTab === "invoices" ? "default" : "outline"}
               onClick={() => setActiveTab("invoices")}
+              className={activeTab === "invoices" ? "bg-[#173B8F] hover:bg-[#102A66] text-white" : "border-[#E8ECF2] text-[#173B8F]"}
             >
               Facturas
             </Button>
             <Button
               variant={activeTab === "subscriptions" ? "default" : "outline"}
               onClick={() => setActiveTab("subscriptions")}
+              className={activeTab === "subscriptions" ? "bg-[#173B8F] hover:bg-[#102A66] text-white" : "border-[#E8ECF2] text-[#173B8F]"}
             >
               Suscripciones
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button className="gap-2" onClick={() => setShowFilters((current) => !current)}>
+            <Button className="gap-2 border-[#E8ECF2] text-[#173B8F]" variant="outline" onClick={() => setShowFilters((current) => !current)}>
               <Filter className="w-4 h-4" /> Filtros
             </Button>
-            <Button className="bg-[#1E3A8A] text-white hover:bg-[#1E3A8A]/90 gap-2">
+            <Button className="bg-[#173B8F] text-white hover:bg-[#102A66] gap-2">
               <Plus className="w-4 h-4" /> Nueva factura
             </Button>
           </div>
         </div>
 
         {showFilters && (
-          <Card className="border-gray-200 shadow-sm">
+          <Card className="border border-[#E8ECF2] shadow-sm">
             <CardContent className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-slate-700">Buscar</p>
+                <p className="text-sm font-medium text-[#52627A]">Buscar</p>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -189,12 +192,12 @@ export default function Billing() {
                       setSearchTerm(event.target.value);
                       setCurrentPage(1);
                     }}
-                    className="pl-10"
+                    className="pl-10 border-[#E8ECF2] focus:ring-[#173B8F]"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-slate-700">Estado</p>
+                <p className="text-sm font-medium text-[#52627A]">Estado</p>
                 <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value as InvoiceStatus | "all"); setCurrentPage(1); }}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Selecciona estado" />
@@ -209,7 +212,7 @@ export default function Billing() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-slate-700">Cliente</p>
+                <p className="text-sm font-medium text-[#52627A]">Cliente</p>
                 <Select value={clientFilter} onValueChange={(value) => { setClientFilter(value); setCurrentPage(1); }}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Selecciona cliente" />
@@ -228,11 +231,11 @@ export default function Billing() {
         )}
 
         {activeTab === "subscriptions" && (
-          <Card className="border-gray-200 shadow-sm">
+          <Card className="border border-[#E8ECF2] shadow-sm">
             <CardHeader>
               <div>
-                <CardTitle>Suscripciones</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-[#102A66]">Suscripciones</CardTitle>
+                <CardDescription className="text-[#52627A]">
                   Mantén el control de tus suscripciones activas y renuncios automáticos.
                 </CardDescription>
               </div>
@@ -241,12 +244,12 @@ export default function Billing() {
               <div className="space-y-4">
                 {invoicesQuery.isLoading ? (
                   <div className="flex items-center justify-center py-14">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#1E3A8A]" />
+                    <Loader2 className="h-8 w-8 animate-spin text-[#173B8F]" />
                   </div>
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-600">
-                    <AlertCircle className="mx-auto mb-4 h-10 w-10 text-slate-400" />
-                    <p className="font-semibold text-slate-900">No hay datos de suscripciones disponibles</p>
+                  <div className="rounded-3xl border border-dashed border-[#E8ECF2] bg-[#F4F6F9] p-8 text-center text-[#52627A]">
+                    <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[#173B8F]" />
+                    <p className="font-semibold text-[#102A66]">No hay datos de suscripciones disponibles</p>
                     <p className="mt-2 text-sm">Este panel está preparado para mostrar las suscripciones del cliente.</p>
                   </div>
                 )}
@@ -257,16 +260,16 @@ export default function Billing() {
 
         {activeTab === "invoices" && (
           <div className="space-y-4">
-            <Card className="border-gray-200 shadow-sm">
+            <Card className="border border-[#E8ECF2] shadow-sm">
               <CardHeader>
                 <div>
-                  <CardTitle>Facturas</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-[#102A66]">Facturas</CardTitle>
+                  <CardDescription className="text-[#52627A]">
                     Administra todas las facturas con filtros, búsqueda en tiempo real, ordenación y selección múltiple.
                   </CardDescription>
                 </div>
                 <CardAction>
-                  <Button className="bg-[#1E3A8A] text-white hover:bg-[#1E3A8A]/90 gap-2">
+                  <Button className="bg-[#173B8F] text-white hover:bg-[#102A66] gap-2">
                     <Plus className="w-4 h-4" /> Nueva factura
                   </Button>
                 </CardAction>
@@ -282,27 +285,27 @@ export default function Billing() {
                         setSearchTerm(event.target.value);
                         setCurrentPage(1);
                       }}
-                      className="pl-11"
+                      className="pl-11 border-[#E8ECF2] focus:ring-[#173B8F]"
                     />
                   </div>
                   <div className="flex flex-wrap gap-2 justify-end">
                     <Button
                       variant="outline"
-                      className="gap-2"
+                      className="gap-2 border-[#E8ECF2] text-[#173B8F]"
                       onClick={() => onSortChange("issueDate")}
                     >
                       Fecha emisión
                     </Button>
                     <Button
                       variant="outline"
-                      className="gap-2"
+                      className="gap-2 border-[#E8ECF2] text-[#173B8F]"
                       onClick={() => onSortChange("dueDate")}
                     >
                       Fecha vencimiento
                     </Button>
                     <Button
                       variant="outline"
-                      className="gap-2"
+                      className="gap-2 border-[#E8ECF2] text-[#173B8F]"
                       onClick={() => onSortChange("total")}
                     >
                       Importe
@@ -311,13 +314,13 @@ export default function Billing() {
                 </div>
 
                 {selectedInvoiceIds.length > 0 && (
-                  <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-slate-700">
+                  <div className="flex flex-col gap-3 rounded-3xl border border-[#E8ECF2] bg-[#F4F6F9] p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-[#52627A]">
                       {selectedInvoiceIds.length} factura{selectedInvoiceIds.length > 1 ? "s" : ""} seleccionada{selectedInvoiceIds.length > 1 ? "s" : ""}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => handleBulkAction("markPaid")}>Marcar como pagada</Button>
-                      <Button variant="secondary" onClick={() => handleBulkAction("send")}>Enviar</Button>
+                      <Button variant="secondary" className="bg-[#173B8F]/10 text-[#173B8F] hover:bg-[#173B8F]/20" onClick={() => handleBulkAction("markPaid")}>Marcar como pagada</Button>
+                      <Button variant="secondary" className="bg-[#173B8F]/10 text-[#173B8F] hover:bg-[#173B8F]/20" onClick={() => handleBulkAction("send")}>Enviar</Button>
                       <Button variant="destructive" onClick={() => handleBulkAction("delete")}>Eliminar</Button>
                     </div>
                   </div>
@@ -325,13 +328,13 @@ export default function Billing() {
 
                 {invoicesQuery.isLoading ? (
                   <div className="flex items-center justify-center py-14">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#1E3A8A]" />
+                    <Loader2 className="h-8 w-8 animate-spin text-[#173B8F]" />
                   </div>
                 ) : filteredInvoices.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
-                    <AlertCircle className="mx-auto mb-3 h-10 w-10 text-amber-500" />
-                    <h2 className="text-xl font-semibold text-slate-900">No se han encontrado facturas</h2>
-                    <p className="mt-2 text-sm text-slate-600">Cambia el filtro o prueba otra búsqueda para ver resultados.</p>
+                  <div className="rounded-3xl border border-dashed border-[#E8ECF2] bg-[#F4F6F9] p-10 text-center">
+                    <AlertCircle className="mx-auto mb-3 h-10 w-10 text-[#173B8F]" />
+                    <h2 className="text-xl font-semibold text-[#102A66]">No se han encontrado facturas</h2>
+                    <p className="mt-2 text-sm text-[#52627A]">Cambia el filtro o prueba otra búsqueda para ver resultados.</p>
                   </div>
                 ) : (
                   <InvoiceTable

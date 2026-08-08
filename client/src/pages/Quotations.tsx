@@ -5,8 +5,7 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Eye, Download, Search } from "lucide-react";
-import DashboardLayout from "@/components/DashboardLayout";
+import { FileText, Eye, Download, Search, ArrowLeft, Loader2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface Quotation {
@@ -25,6 +24,7 @@ export default function Quotations() {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     const fetchQuotations = async () => {
@@ -33,7 +33,6 @@ export default function Quotations() {
       try {
         setLoading(true);
         
-        // Get company_id
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("company_id")
@@ -80,7 +79,7 @@ export default function Quotations() {
       case "caducado":
         return <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 border-none">Caducado</Badge>;
       case "borrador":
-        return <Badge variant="outline">Borrador</Badge>;
+        return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none">Borrador</Badge>;
       default:
         return <Badge variant="outline">{estado}</Badge>;
     }
@@ -93,78 +92,95 @@ export default function Quotations() {
     }).format(amount);
   };
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-[#1E3A8A]">Presupuestos</h1>
-            <p className="text-gray-600 mt-1">
-              Revisa y gestiona tus propuestas comerciales y presupuestos.
-            </p>
-          </div>
-        </div>
+  const filteredQuotations = quotations.filter(q =>
+    q.numero_presupuesto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    q.titulo.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-[#102A66] to-[#173B8F] text-white py-8">
+        <div className="container mx-auto px-4">
+          <Button
+            onClick={() => setLocation("/area-cliente")}
+            variant="ghost"
+            className="text-white hover:bg-white/10 mb-4 flex gap-2 items-center"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver al Área de Clientes
+          </Button>
+          <h1 className="text-4xl font-bold">Presupuestos</h1>
+          <p className="text-white/80 mt-2">Revisa y gestiona tus propuestas comerciales personalizadas</p>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-12">
         {error && (
-          <Card className="p-4 border-red-200 bg-red-50 text-red-700">
+          <Card className="p-4 border-red-200 bg-red-50 text-red-700 mb-8">
             Error: {error}
           </Card>
         )}
 
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
+        {/* Search */}
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#52627A]" />
             <input
               type="text"
               placeholder="Buscar por número o título..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/20"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-[#E8ECF2] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#173B8F] bg-white"
             />
           </div>
         </div>
 
-        <Card className="border-2 border-gray-100 overflow-hidden">
+        {/* Quotations Table */}
+        <Card className="border border-[#E8ECF2] overflow-hidden">
           {loading ? (
-            <div className="p-8 space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-12 w-full bg-gray-50 animate-pulse rounded-md" />
-              ))}
-            </div>
-          ) : quotations.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="mx-auto w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-                <FileText className="h-8 w-8 text-[#1E3A8A]" />
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <Loader2 className="h-12 w-12 text-[#173B8F] animate-spin mx-auto mb-4" />
+                <p className="text-[#52627A]">Cargando presupuestos...</p>
               </div>
-              <h3 className="text-lg font-bold text-gray-900">No hay presupuestos</h3>
-              <p className="text-gray-600 mt-2">
-                Aún no se han generado presupuestos para tu cuenta.
+            </div>
+          ) : filteredQuotations.length === 0 ? (
+            <div className="p-12 text-center">
+              <div className="mx-auto w-16 h-16 bg-[#173B8F]/10 rounded-full flex items-center justify-center mb-4">
+                <FileText className="h-8 w-8 text-[#173B8F]" />
+              </div>
+              <h3 className="text-lg font-bold text-[#102A66]">No hay presupuestos</h3>
+              <p className="text-[#52627A] mt-2">
+                Aún no se han generado presupuestos para tu cuenta. Contacta con nuestro equipo para solicitar uno.
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50 hover:bg-gray-50">
-                  <TableHead className="font-bold text-[#1E3A8A]">Número</TableHead>
-                  <TableHead className="font-bold text-[#1E3A8A]">Título</TableHead>
-                  <TableHead className="font-bold text-[#1E3A8A]">Fecha</TableHead>
-                  <TableHead className="font-bold text-[#1E3A8A]">Importe</TableHead>
-                  <TableHead className="font-bold text-[#1E3A8A]">Estado</TableHead>
-                  <TableHead className="text-right font-bold text-[#1E3A8A]">Acciones</TableHead>
+                <TableRow className="bg-[#F4F6F9] hover:bg-[#F4F6F9] border-b border-[#E8ECF2]">
+                  <TableHead className="font-bold text-[#102A66]">Número</TableHead>
+                  <TableHead className="font-bold text-[#102A66]">Título</TableHead>
+                  <TableHead className="font-bold text-[#102A66]">Fecha</TableHead>
+                  <TableHead className="font-bold text-[#102A66]">Importe</TableHead>
+                  <TableHead className="font-bold text-[#102A66]">Estado</TableHead>
+                  <TableHead className="text-right font-bold text-[#102A66]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {quotations.map((q) => (
-                  <TableRow key={q.id} className="hover:bg-blue-50/30 transition-colors">
-                    <TableCell className="font-medium">{q.numero_presupuesto}</TableCell>
-                    <TableCell>{q.titulo}</TableCell>
-                    <TableCell>{new Date(q.fecha_emision).toLocaleDateString("es-ES")}</TableCell>
-                    <TableCell className="font-semibold">{formatCurrency(q.precio_total)}</TableCell>
+                {filteredQuotations.map((q) => (
+                  <TableRow key={q.id} className="hover:bg-[#F4F6F9]/50 transition-colors border-b border-[#E8ECF2]">
+                    <TableCell className="font-medium text-[#182230]">{q.numero_presupuesto}</TableCell>
+                    <TableCell className="text-[#182230]">{q.titulo}</TableCell>
+                    <TableCell className="text-[#52627A]">{new Date(q.fecha_emision).toLocaleDateString("es-ES")}</TableCell>
+                    <TableCell className="font-semibold text-[#173B8F]">{formatCurrency(q.precio_total)}</TableCell>
                     <TableCell>{getStatusBadge(q.estado)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-[#1E3A8A] hover:text-[#1E3A8A] hover:bg-blue-100"
+                          className="text-[#173B8F] hover:text-[#173B8F] hover:bg-[#173B8F]/10"
                           onClick={() => setLocation(`/presupuesto/${q.id}`)}
                         >
                           <Eye className="h-4 w-4 mr-1" />
@@ -173,7 +189,7 @@ export default function Quotations() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                          className="text-[#52627A] hover:text-[#173B8F] hover:bg-[#173B8F]/10"
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -185,7 +201,14 @@ export default function Quotations() {
             </Table>
           )}
         </Card>
-      </div>
-    </DashboardLayout>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-[#102A66] text-white py-8 mt-20">
+        <div className="container mx-auto px-4 text-center text-white/70 text-sm">
+          <p>© 2024 Modira. Todos los derechos reservados.</p>
+        </div>
+      </footer>
+    </div>
   );
 }

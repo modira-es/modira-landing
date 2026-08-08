@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   LogOut, User, Mail, Building2, Calendar, Zap, FileText, 
-  CreditCard, AlertCircle, Edit2, Shield, Info 
+  CreditCard, AlertCircle, Edit2, Shield, Info, ArrowRight,
+  Loader2
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import ClientAreaHeader from "@/components/ClientAreaHeader";
 
 interface UserProfile {
   id: string;
@@ -148,10 +150,13 @@ export default function ClientArea() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E3A8A]"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
+      <div className="min-h-screen bg-white">
+        <ClientAreaHeader userName="..." onLogout={handleLogout} />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 text-[#173B8F] animate-spin mx-auto mb-4" />
+            <p className="text-[#52627A]">Cargando tu área de clientes...</p>
+          </div>
         </div>
       </div>
     );
@@ -160,164 +165,354 @@ export default function ClientArea() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-[#1E3A8A]">Área de Clientes</h1>
-            <p className="text-gray-600 mt-1">
-              Bienvenido, {profile?.nombre || user.email}
-            </p>
-          </div>
-          <Button onClick={handleLogout} variant="outline" className="flex gap-2 items-center">
-            <LogOut className="h-4 w-4" />
-            Cerrar sesión
-          </Button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-white">
+      <ClientAreaHeader userName={profile?.nombre || user.email || "Usuario"} onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-4 py-16">
         {error && (
-          <Card className="p-6 border-2 border-red-200 bg-red-50 mb-8 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600" />
+          <Card className="p-6 border-2 border-red-200 bg-red-50 mb-12 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
             <p className="text-red-700">{error}</p>
           </Card>
         )}
 
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
-          <Card className="md:col-span-2 p-8 border-2 border-gray-200">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-[#1E3A8A]">Mi Perfil</h2>
-              <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex gap-2">
-                    <Edit2 className="h-4 w-4" />
-                    Editar Perfil
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Editar Perfil</DialogTitle>
-                    <DialogDescription>Actualiza tu información personal y de contacto.</DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="name">Nombre</Label>
-                      <Input id="name" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} />
+        {/* Mi Perfil Section */}
+        <section id="perfil" className="mb-20">
+          <div className="mb-8">
+            <h2 className="text-4xl font-bold text-[#102A66] mb-2">Mi Perfil</h2>
+            <p className="text-[#52627A]">Información personal y configuración de tu cuenta</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Profile Information */}
+            <div className="md:col-span-2">
+              <Card className="p-8 border border-[#E8ECF2] bg-white">
+                {profile ? (
+                  <div className="space-y-8">
+                    {/* Row 1 */}
+                    <div className="grid md:grid-cols-2 gap-8">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="h-4 w-4 text-[#173B8F]" />
+                          <label className="text-sm font-semibold text-[#52627A]">Nombre Completo</label>
+                        </div>
+                        <p className="text-lg font-semibold text-[#182230]">{profile.nombre}</p>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Mail className="h-4 w-4 text-[#173B8F]" />
+                          <label className="text-sm font-semibold text-[#52627A]">Correo Electrónico</label>
+                        </div>
+                        <p className="text-lg font-semibold text-[#182230]">{user.email}</p>
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="company">Empresa</Label>
-                      <Input id="company" value={editForm.empresa} onChange={(e) => setEditForm({ ...editForm, empresa: e.target.value })} />
+
+                    <div className="border-t border-[#E8ECF2]"></div>
+
+                    {/* Row 2 */}
+                    <div className="grid md:grid-cols-2 gap-8">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Building2 className="h-4 w-4 text-[#173B8F]" />
+                          <label className="text-sm font-semibold text-[#52627A]">Empresa</label>
+                        </div>
+                        <p className="text-lg font-semibold text-[#182230]">{profile.empresa || "No especificada"}</p>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Shield className="h-4 w-4 text-[#173B8F]" />
+                          <label className="text-sm font-semibold text-[#52627A]">Rol</label>
+                        </div>
+                        <Badge className="bg-[#173B8F]/10 text-[#173B8F] border-[#173B8F]/20">
+                          {profile.rol === "admin" ? "Administrador" : "Usuario Cliente"}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="phone">Teléfono</Label>
-                      <Input id="phone" value={editForm.telefono} onChange={(e) => setEditForm({ ...editForm, telefono: e.target.value })} />
+
+                    <div className="border-t border-[#E8ECF2]"></div>
+
+                    {/* Row 3 */}
+                    <div className="grid md:grid-cols-2 gap-8">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Calendar className="h-4 w-4 text-[#173B8F]" />
+                          <label className="text-sm font-semibold text-[#52627A]">Fecha de Registro</label>
+                        </div>
+                        <p className="text-lg font-semibold text-[#182230]">
+                          {profile.fecha_registro ? new Date(profile.fecha_registro).toLocaleDateString("es-ES") : "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Calendar className="h-4 w-4 text-[#173B8F]" />
+                          <label className="text-sm font-semibold text-[#52627A]">Último Acceso</label>
+                        </div>
+                        <p className="text-lg font-semibold text-[#182230]">
+                          {profile.fecha_ultimo_login ? new Date(profile.fecha_ultimo_login).toLocaleDateString("es-ES") : "-"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-[#E8ECF2]"></div>
+
+                    {/* Edit Button */}
+                    <div className="flex gap-3">
+                      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="bg-[#173B8F] hover:bg-[#102A66] text-white flex gap-2">
+                            <Edit2 className="h-4 w-4" />
+                            Editar Perfil
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Editar Perfil</DialogTitle>
+                            <DialogDescription>Actualiza tu información personal y de contacto.</DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                              <Label htmlFor="name">Nombre</Label>
+                              <Input id="name" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label htmlFor="company">Empresa</Label>
+                              <Input id="company" value={editForm.empresa} onChange={(e) => setEditForm({ ...editForm, empresa: e.target.value })} />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label htmlFor="phone">Teléfono</Label>
+                              <Input id="phone" value={editForm.telefono} onChange={(e) => setEditForm({ ...editForm, telefono: e.target.value })} />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
+                            <Button className="bg-[#173B8F] hover:bg-[#102A66] text-white" onClick={handleUpdateProfile}>Guardar Cambios</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
-                    <Button className="bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white" onClick={handleUpdateProfile}>Guardar Cambios</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                ) : (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 text-[#173B8F] animate-spin" />
+                  </div>
+                )}
+              </Card>
             </div>
 
-            {profile ? (
-              <div className="grid md:grid-cols-2 gap-8">
+            {/* Account Status */}
+            <div>
+              <Card className="p-8 border border-[#E8ECF2] bg-[#F4F6F9]">
+                <h3 className="text-lg font-bold text-[#102A66] mb-6 flex items-center gap-2">
+                  <Info className="h-5 w-5" />
+                  Estado de la Cuenta
+                </h3>
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-600 mb-1"><User className="inline h-4 w-4 mr-2" />Nombre completo</label>
-                    <p className="text-lg text-gray-900 font-medium">{profile.nombre}</p>
+                    <label className="text-xs font-semibold text-[#52627A] uppercase mb-2 block">Empresa Asociada</label>
+                    <p className="text-sm font-bold text-[#182230]">{company?.company_name || profile?.empresa || "Sin empresa"}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-600 mb-1"><Mail className="inline h-4 w-4 mr-2" />Correo electrónico</label>
-                    <p className="text-lg text-gray-900">{user.email}</p>
+                    <label className="text-xs font-semibold text-[#52627A] uppercase mb-2 block">Plan</label>
+                    <Badge className="bg-[#173B8F]/10 text-[#173B8F] border-[#173B8F]/20 text-xs">
+                      {company?.subscription_plan || "Plan Demo"}
+                    </Badge>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-600 mb-1"><Shield className="inline h-4 w-4 mr-2" />Rol</label>
-                    <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none">{profile.rol === "admin" ? "Administrador" : "Usuario Cliente"}</Badge>
+                    <label className="text-xs font-semibold text-[#52627A] uppercase mb-2 block">Estado</label>
+                    <div className="flex items-center gap-2">
+                      <div className={`h-3 w-3 rounded-full ${company?.subscription_status === 'active' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                      <span className="text-sm font-medium text-[#182230] capitalize">{company?.subscription_status || "Activa"}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-600 mb-1"><Building2 className="inline h-4 w-4 mr-2" />Empresa</label>
-                    <p className="text-lg text-gray-900">{profile.empresa || "No especificada"}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-600 mb-1">Teléfono</label>
-                    <p className="text-lg text-gray-900">{profile.telefono || "No especificado"}</p>
-                  </div>
+              </Card>
+            </div>
+          </div>
+        </section>
+
+        {/* Mis Proyectos Section */}
+        <section className="mb-20 py-16 bg-[#F4F6F9] -mx-4 px-4">
+          <div className="container mx-auto">
+            <div className="mb-8">
+              <h2 className="text-4xl font-bold text-[#102A66] mb-2">Mis Proyectos</h2>
+              <p className="text-[#52627A]">Gestiona y revisa el estado de tus automatizaciones activas</p>
+            </div>
+
+            <Card className="p-8 md:p-12 border border-[#E8ECF2] bg-white">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div>
+                  <p className="text-lg text-[#52627A] mb-4">
+                    Accede a todos tus proyectos de automatización, revisa su estado, progreso y realiza cambios cuando sea necesario.
+                  </p>
+                  <ul className="space-y-2 text-[#52627A]">
+                    <li className="flex gap-2 items-start">
+                      <span className="text-[#173B8F] font-bold">✓</span>
+                      <span>Visualiza el estado de cada automatización</span>
+                    </li>
+                    <li className="flex gap-2 items-start">
+                      <span className="text-[#173B8F] font-bold">✓</span>
+                      <span>Accede a documentación y detalles técnicos</span>
+                    </li>
+                    <li className="flex gap-2 items-start">
+                      <span className="text-[#173B8F] font-bold">✓</span>
+                      <span>Solicita cambios o mejoras</span>
+                    </li>
+                  </ul>
                 </div>
+                <Button
+                  onClick={() => setLocation("/area-cliente/proyectos")}
+                  className="bg-[#173B8F] hover:bg-[#102A66] text-white font-semibold flex gap-2 items-center whitespace-nowrap"
+                >
+                  Ver Proyectos
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </div>
-            ) : (
-              <p className="text-gray-600">Cargando perfil...</p>
-            )}
-          </Card>
+            </Card>
+          </div>
+        </section>
 
-          <Card className="p-8 border-2 border-gray-200 bg-gray-50/50">
-            <h3 className="text-xl font-bold text-[#1E3A8A] mb-6 flex items-center gap-2"><Info className="h-5 w-5" />Información</h3>
-            <div className="space-y-6">
+        {/* Presupuestos Section */}
+        <section className="mb-20">
+          <div className="mb-8">
+            <h2 className="text-4xl font-bold text-[#102A66] mb-2">Presupuestos</h2>
+            <p className="text-[#52627A]">Revisa y acepta tus propuestas comerciales personalizadas</p>
+          </div>
+
+          <Card className="p-8 md:p-12 border border-[#E8ECF2] bg-white">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Empresa Asociada</label>
-                <p className="text-sm font-bold text-gray-900">{company?.company_name || profile?.empresa || "Sin empresa"}</p>
+                <p className="text-lg text-[#52627A] mb-4">
+                  Aquí encontrarás todos los presupuestos personalizados para tu empresa. Revisa los detalles, servicios incluidos y acepta cuando estés listo.
+                </p>
+                <ul className="space-y-2 text-[#52627A]">
+                  <li className="flex gap-2 items-start">
+                    <span className="text-[#173B8F] font-bold">✓</span>
+                    <span>Propuestas personalizadas según tu necesidad</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-[#173B8F] font-bold">✓</span>
+                    <span>Detalles completos de servicios y precios</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-[#173B8F] font-bold">✓</span>
+                    <span>Acepta y comienza tu proyecto</span>
+                  </li>
+                </ul>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Plan</label>
-                <Badge variant="outline" className="text-xs">{company?.subscription_plan || "Plan Demo"}</Badge>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Estado</label>
-                <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${company?.subscription_status === 'active' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                  <span className="text-sm font-medium text-gray-700 capitalize">{company?.subscription_status || "Activa"}</span>
+              <Button
+                onClick={() => setLocation("/area-cliente/presupuestos")}
+                className="bg-[#173B8F] hover:bg-[#102A66] text-white font-semibold flex gap-2 items-center whitespace-nowrap"
+              >
+                Ver Presupuestos
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </Card>
+        </section>
+
+        {/* Facturación Section */}
+        <section className="mb-20 py-16 bg-[#F4F6F9] -mx-4 px-4">
+          <div className="container mx-auto">
+            <div className="mb-8">
+              <h2 className="text-4xl font-bold text-[#102A66] mb-2">Facturación</h2>
+              <p className="text-[#52627A]">Descarga tus facturas y gestiona tus métodos de pago</p>
+            </div>
+
+            <Card className="p-8 md:p-12 border border-[#E8ECF2] bg-white">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div>
+                  <p className="text-lg text-[#52627A] mb-4">
+                    Accede a tu historial de facturas, descárgalas para tus registros y gestiona tus métodos de pago.
+                  </p>
+                  <ul className="space-y-2 text-[#52627A]">
+                    <li className="flex gap-2 items-start">
+                      <span className="text-[#173B8F] font-bold">✓</span>
+                      <span>Historial completo de facturas</span>
+                    </li>
+                    <li className="flex gap-2 items-start">
+                      <span className="text-[#173B8F] font-bold">✓</span>
+                      <span>Descarga en PDF para tus registros</span>
+                    </li>
+                    <li className="flex gap-2 items-start">
+                      <span className="text-[#173B8F] font-bold">✓</span>
+                      <span>Gestión de métodos de pago</span>
+                    </li>
+                  </ul>
                 </div>
+                <Button
+                  onClick={() => setLocation("/area-cliente/facturacion")}
+                  className="bg-[#173B8F] hover:bg-[#102A66] text-white font-semibold flex gap-2 items-center whitespace-nowrap"
+                >
+                  Ir a Facturación
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </div>
-              <div className="pt-4 border-t border-gray-200 text-xs text-gray-500 space-y-2">
-                <div className="flex justify-between"><span>Registro:</span><span>{profile?.fecha_registro ? new Date(profile.fecha_registro).toLocaleDateString("es-ES") : "-"}</span></div>
-                <div className="flex justify-between"><span>Último acceso:</span><span>{profile?.fecha_ultimo_login ? new Date(profile.fecha_ultimo_login).toLocaleDateString("es-ES") : "-"}</span></div>
+            </Card>
+          </div>
+        </section>
+
+        {/* Soporte Técnico Section */}
+        <section className="mb-20">
+          <div className="mb-8">
+            <h2 className="text-4xl font-bold text-[#102A66] mb-2">Soporte Técnico</h2>
+            <p className="text-[#52627A]">¿Necesitas ayuda? Abre un ticket y nuestro equipo te ayudará</p>
+          </div>
+
+          <Card className="p-8 md:p-12 border border-[#E8ECF2] bg-white">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div>
+                <p className="text-lg text-[#52627A] mb-4">
+                  Nuestro equipo de soporte está disponible para ayudarte con cualquier pregunta o problema técnico.
+                </p>
+                <ul className="space-y-2 text-[#52627A]">
+                  <li className="flex gap-2 items-start">
+                    <span className="text-[#173B8F] font-bold">✓</span>
+                    <span>Soporte técnico dedicado</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-[#173B8F] font-bold">✓</span>
+                    <span>Respuestas rápidas a tus consultas</span>
+                  </li>
+                  <li className="flex gap-2 items-start">
+                    <span className="text-[#173B8F] font-bold">✓</span>
+                    <span>Seguimiento de tus tickets</span>
+                  </li>
+                </ul>
               </div>
+              <Button
+                onClick={() => setLocation("/area-cliente/soporte")}
+                className="bg-[#173B8F] hover:bg-[#102A66] text-white font-semibold flex gap-2 items-center whitespace-nowrap"
+              >
+                Abrir Ticket
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             </div>
           </Card>
-        </div>
+        </section>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="p-8 border-2 border-gray-100 hover:border-[#1E3A8A] transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-[#1E3A8A]">Mis Proyectos</h3>
-              <div className="bg-blue-50 p-2 rounded-lg text-[#1E3A8A] group-hover:bg-[#1E3A8A] group-hover:text-white transition-colors"><Zap className="w-5 h-5" /></div>
-            </div>
-            <p className="text-gray-600 mb-6">Gestiona y revisa el estado de tus automatizaciones activas.</p>
-            <Button variant="outline" className="w-full border-[#1E3A8A] text-[#1E3A8A] hover:bg-blue-50" onClick={() => setLocation("/area-cliente/proyectos")}>Ver Proyectos</Button>
-          </Card>
-
-          <Card className="p-8 border-2 border-gray-100 hover:border-[#1E3A8A] transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-[#1E3A8A]">Presupuestos</h3>
-              <div className="bg-blue-50 p-2 rounded-lg text-[#1E3A8A] group-hover:bg-[#1E3A8A] group-hover:text-white transition-colors"><FileText className="w-5 h-5" /></div>
-            </div>
-            <p className="text-gray-600 mb-6">Revisa y acepta tus propuestas comerciales personalizadas.</p>
-            <Button className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white" onClick={() => setLocation("/area-cliente/presupuestos")}>Ver Presupuestos</Button>
-          </Card>
-
-          <Card className="p-8 border-2 border-gray-100 hover:border-[#1E3A8A] transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-[#1E3A8A]">Facturación</h3>
-              <div className="bg-blue-50 p-2 rounded-lg text-[#1E3A8A] group-hover:bg-[#1E3A8A] group-hover:text-white transition-colors"><CreditCard className="w-5 h-5" /></div>
-            </div>
-            <p className="text-gray-600 mb-6">Descarga tus facturas y gestiona tus métodos de pago.</p>
-            <Button variant="outline" className="w-full border-[#1E3A8A] text-[#1E3A8A] hover:bg-blue-50" onClick={() => setLocation("/area-cliente/facturacion")}>Ir a Facturación</Button>
-          </Card>
-
-          <Card className="p-8 border-2 border-gray-100 hover:border-[#1E3A8A] transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-[#1E3A8A]">Soporte Técnico</h3>
-              <div className="bg-blue-50 p-2 rounded-lg text-[#1E3A8A] group-hover:bg-[#1E3A8A] group-hover:text-white transition-colors"><AlertCircle className="w-5 h-5" /></div>
-            </div>
-            <p className="text-gray-600 mb-6">¿Tienes algún problema? Abre un ticket y te ayudaremos pronto.</p>
-            <Button variant="outline" className="w-full border-[#1E3A8A] text-[#1E3A8A] hover:bg-blue-50" onClick={() => setLocation("/area-cliente/soporte")}>Abrir Ticket</Button>
-          </Card>
-        </div>
+        {/* Contact Section */}
+        <section className="py-16 bg-gradient-to-r from-[#102A66] to-[#173B8F] -mx-4 px-4 rounded-2xl text-white">
+          <div className="container mx-auto text-center">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">¿Necesitas ayuda adicional?</h2>
+            <p className="text-white/80 mb-8 max-w-2xl mx-auto">
+              Si tienes preguntas que no encuentras en el área de clientes, no dudes en contactarnos. Nuestro equipo está aquí para ayudarte.
+            </p>
+            <Button
+              className="bg-white text-[#102A66] hover:bg-white/90 font-semibold"
+              onClick={() => window.location.href = "mailto:info@modira.es"}
+            >
+              Contactar a Modira
+            </Button>
+          </div>
+        </section>
       </main>
+
+      {/* Footer */}
+      <footer className="bg-[#102A66] text-white py-8 mt-20">
+        <div className="container mx-auto px-4 text-center text-white/70 text-sm">
+          <p>© 2024 Modira. Todos los derechos reservados.</p>
+        </div>
+      </footer>
     </div>
   );
 }
