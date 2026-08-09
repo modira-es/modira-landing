@@ -17,6 +17,9 @@ import Billing from "./pages/Billing";
 import Projects from "./pages/Projects";
 import Quotations from "./pages/Quotations";
 import Support from "./pages/Support";
+import EmployeeAuth from "./pages/EmployeeAuth";
+import EmployeeArea from "./pages/EmployeeArea";
+import EmployeeRoute from "./components/EmployeeRoute";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookiePolicy from "./pages/CookiePolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -37,6 +40,11 @@ function Router() {
       <Route path="/area-cliente/presupuestos" component={() => <ProtectedRoute><Quotations /></ProtectedRoute>} />
       <Route path="/area-cliente/facturacion" component={() => <ProtectedRoute><Billing /></ProtectedRoute>} />
       <Route path="/area-cliente/soporte" component={() => <ProtectedRoute><Support /></ProtectedRoute>} />
+      
+      {/* Rutas de Empleados */}
+      <Route path="/empleados/login" component={EmployeeAuth} />
+      <Route path="/area-empleados" component={() => <EmployeeRoute><EmployeeArea /></EmployeeRoute>} />
+      
       <Route path="/politica-privacidad" component={PrivacyPolicy} />
       <Route path="/politica-cookies" component={CookiePolicy} />
       <Route path="/terminos" component={TermsOfService} />

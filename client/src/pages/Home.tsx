@@ -962,6 +962,11 @@ export default function Home() {
                   </a>
                 </li>
                 <li>
+                  <a href="/empleados/login" className="hover:text-white transition">
+                    Área de empleados
+                  </a>
+                </li>
+                <li>
                   <a href="#auditoria" className="hover:text-white transition">
                     Contacto
                   </a>
