@@ -1,468 +1,582 @@
 BEGIN;
 
--- =========================================================
--- MODIRA - MIGRACIÓN 001
--- Arquitectura multiempresa sobre Supabase PostgreSQL
+-- ============================================================
+-- MODIRA
+-- 001_initial_schema.sql
+-- PostgreSQL / Supabase
 --
--- IMPORTANTE:
--- - No elimina tablas.
--- - No elimina datos.
--- - Conserva user_id en las tablas existentes.
--- - Añade company_id para preparar el modelo multiempresa.
--- =========================================================
+-- ARQUITECTURA:
+-- auth.users
+--      ↓
+-- profiles
+--      ↓
+-- companies
+--      ↓
+-- ┌──────────┬──────────┬──────────┬──────────────┐
+-- clients  projects  quotations  invoices       │
+--                       │          │             │
+--                       └──────────┴── payments   │
+--                                                │
+-- budgets / support_tickets / automations ───────┘
+--
+-- Supabase es la fuente de verdad.
+-- No depende de Drizzle.
+-- ============================================================
 
 
--- =========================================================
+-- ============================================================
 -- 1. EXTENSIONES
--- =========================================================
+-- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 
--- =========================================================
+-- ============================================================
 -- 2. COMPANIES
--- =========================================================
+-- ============================================================
 
-CREATE TABLE IF NOT EXISTS public.companies (
+CREATE TABLE public.companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
     company_code VARCHAR(50) NOT NULL UNIQUE,
     company_name TEXT NOT NULL,
+
     legal_name TEXT,
     cif_vat TEXT,
+
     billing_email VARCHAR(320),
     phone TEXT,
     website TEXT,
     logo_url TEXT,
+
     address TEXT,
     postal_code TEXT,
     city TEXT,
     province TEXT,
-    country TEXT DEFAULT 'ES',
+    country VARCHAR(2) NOT NULL DEFAULT 'ES',
+
     industry TEXT,
     employees INTEGER,
+
     timezone VARCHAR(64) NOT NULL DEFAULT 'Europe/Madrid',
     language VARCHAR(10) NOT NULL DEFAULT 'es',
     currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
+
     stripe_customer_id TEXT,
     subscription_plan TEXT,
     subscription_status VARCHAR(50),
     trial_ends_at TIMESTAMPTZ,
+
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_by UUID,
-    updated_by UUID,
+
+    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+
     settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 
--- =========================================================
--- 3. PROFILES → COMPANY
--- =========================================================
+-- ============================================================
+-- 3. PROFILES
+-- ============================================================
 
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS company_id UUID;
+CREATE TABLE public.profiles (
+    id UUID PRIMARY KEY
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
 
+    nombre TEXT NOT NULL,
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'profiles_company_id_fkey'
-    ) THEN
-        ALTER TABLE public.profiles
-        ADD CONSTRAINT profiles_company_id_fkey
-        FOREIGN KEY (company_id)
+    empresa TEXT,
+    telefono TEXT,
+
+    rol TEXT NOT NULL DEFAULT 'user',
+
+    company_id UUID
         REFERENCES public.companies(id)
-        ON DELETE SET NULL;
-    END IF;
-END $$;
+        ON DELETE SET NULL,
+
+    fecha_registro TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_ultimo_login TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT profiles_rol_check
+        CHECK (rol IN ('user', 'admin'))
+);
 
 
--- =========================================================
--- 4. CREAR EMPRESA INICIAL
+-- ============================================================
+-- 4. CLIENTS
+-- ============================================================
+
+CREATE TABLE public.clients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    nombre TEXT NOT NULL,
+    empresa TEXT,
+
+    email VARCHAR(320),
+    telefono TEXT,
+
+    contacto_principal TEXT,
+
+    cif_vat TEXT,
+
+    direccion TEXT,
+    codigo_postal TEXT,
+    ciudad TEXT,
+    provincia TEXT,
+    pais VARCHAR(2) DEFAULT 'ES',
+
+    sector TEXT,
+    notas TEXT,
+
+    etiquetas JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ============================================================
+-- 5. PROJECTS
+-- ============================================================
+
+CREATE TABLE public.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    client_id UUID
+        REFERENCES public.clients(id)
+        ON DELETE SET NULL,
+
+    nombre TEXT NOT NULL,
+    descripcion TEXT,
+
+    estado TEXT NOT NULL DEFAULT 'activo',
+
+    fecha_inicio TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_fin TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ============================================================
+-- 6. QUOTATIONS
+-- ============================================================
+
+CREATE TABLE public.quotations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    project_id UUID
+        REFERENCES public.projects(id)
+        ON DELETE SET NULL,
+
+    client_id UUID
+        REFERENCES public.clients(id)
+        ON DELETE SET NULL,
+
+    numero_presupuesto TEXT NOT NULL,
+
+    titulo TEXT NOT NULL,
+    descripcion_detallada TEXT,
+
+    servicios_incluidos JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+    precio_base NUMERIC(12,2) NOT NULL DEFAULT 0,
+    iva_porcentaje NUMERIC(5,2) NOT NULL DEFAULT 21,
+    precio_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+
+    estado VARCHAR(50) NOT NULL DEFAULT 'borrador',
+
+    fecha_emision TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_validez TIMESTAMPTZ,
+
+    notas TEXT,
+
+    stripe_session_id TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT quotations_company_number_unique
+        UNIQUE (company_id, numero_presupuesto),
+
+    CONSTRAINT quotations_price_check
+        CHECK (
+            precio_base >= 0
+            AND iva_porcentaje >= 0
+            AND precio_total >= 0
+        )
+);
+
+
+-- ============================================================
+-- 7. INVOICES
+-- ============================================================
+
+CREATE TABLE public.invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    project_id UUID
+        REFERENCES public.projects(id)
+        ON DELETE SET NULL,
+
+    client_id UUID
+        REFERENCES public.clients(id)
+        ON DELETE SET NULL,
+
+    quotation_id UUID
+        REFERENCES public.quotations(id)
+        ON DELETE SET NULL,
+
+    numero_factura TEXT NOT NULL,
+
+    monto NUMERIC(12,2) NOT NULL DEFAULT 0,
+
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+
+    fecha_emision TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_vencimiento TIMESTAMPTZ,
+    fecha_pago TIMESTAMPTZ,
+
+    descripcion TEXT,
+
+    subtotal NUMERIC(12,2),
+    iva_porcentaje NUMERIC(5,2),
+    iva_importe NUMERIC(12,2),
+
+    stripe_invoice_id TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT invoices_company_number_unique
+        UNIQUE (company_id, numero_factura),
+
+    CONSTRAINT invoices_amount_check
+        CHECK (monto >= 0)
+);
+
+
+-- ============================================================
+-- 8. PAYMENTS
+-- ============================================================
+
+CREATE TABLE public.payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    invoice_id UUID
+        REFERENCES public.invoices(id)
+        ON DELETE SET NULL,
+
+    quotation_id UUID
+        REFERENCES public.quotations(id)
+        ON DELETE SET NULL,
+
+    stripe_invoice_id VARCHAR(255),
+    stripe_payment_intent_id VARCHAR(255),
+
+    amount INTEGER NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
+
+    status VARCHAR(50) NOT NULL,
+
+    description TEXT,
+
+    paid_at TIMESTAMPTZ,
+    due_date TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT payments_amount_check
+        CHECK (amount >= 0)
+);
+
+
+-- ============================================================
+-- 9. BUDGETS
+-- ============================================================
+
+CREATE TABLE public.budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    project_id UUID
+        REFERENCES public.projects(id)
+        ON DELETE SET NULL,
+
+    monto NUMERIC(12,2) NOT NULL,
+
+    descripcion TEXT,
+
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+
+    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_aprobacion TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT budgets_amount_check
+        CHECK (monto >= 0)
+);
+
+
+-- ============================================================
+-- 10. SUPPORT TICKETS
+-- ============================================================
+
+CREATE TABLE public.support_tickets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    titulo TEXT NOT NULL,
+    descripcion TEXT NOT NULL,
+
+    estado TEXT NOT NULL DEFAULT 'abierto',
+    prioridad TEXT NOT NULL DEFAULT 'normal',
+
+    fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_cierre TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT support_tickets_estado_check
+        CHECK (
+            estado IN (
+                'abierto',
+                'en_proceso',
+                'cerrado'
+            )
+        ),
+
+    CONSTRAINT support_tickets_prioridad_check
+        CHECK (
+            prioridad IN (
+                'baja',
+                'normal',
+                'alta',
+                'urgente'
+            )
+        )
+);
+
+
+-- ============================================================
+-- 11. AUTOMATIONS
+-- ============================================================
+
+CREATE TABLE public.automations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    company_id UUID NOT NULL
+        REFERENCES public.companies(id)
+        ON DELETE CASCADE,
+
+    nombre TEXT NOT NULL,
+    descripcion TEXT,
+
+    estado TEXT DEFAULT 'activa',
+    tipo TEXT NOT NULL,
+
+    configuracion JSONB,
+
+    fecha_creacion TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    fecha_ultima_ejecucion TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ============================================================
+-- 12. MODIRA - EMPRESA INICIAL
 --
--- Se crea únicamente si todavía no existe ninguna company.
--- Los perfiles existentes se asocian a ella.
--- =========================================================
+-- Se crea antes de asociar profiles.
+-- created_by se deja NULL porque los usuarios pueden
+-- existir ya en auth.users antes de esta migración.
+-- ============================================================
 
-DO $$
+INSERT INTO public.companies (
+    company_code,
+    company_name,
+    legal_name,
+    country,
+    timezone,
+    language,
+    currency,
+    is_active
+)
+VALUES (
+    'MODIRA-001',
+    'Modira',
+    'Modira',
+    'ES',
+    'Europe/Madrid',
+    'es',
+    'EUR',
+    TRUE
+);
+
+
+-- ============================================================
+-- 13. CREAR PERFILES PARA USUARIOS EXISTENTES
+--
+-- Si ya existen usuarios en Supabase Auth, se crean aquí.
+-- El email se utiliza temporalmente como nombre si no existe
+-- información adicional.
+-- ============================================================
+
+INSERT INTO public.profiles (
+    id,
+    nombre,
+    company_id,
+    rol
+)
+SELECT
+    au.id,
+    COALESCE(
+        NULLIF(au.raw_user_meta_data->>'nombre', ''),
+        NULLIF(au.raw_user_meta_data->>'name', ''),
+        au.email,
+        'Usuario'
+    ),
+    c.id,
+    'user'
+FROM auth.users au
+CROSS JOIN public.companies c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE p.id = au.id
+);
+
+
+-- ============================================================
+-- 14. TRIGGER PARA NUEVOS USUARIOS
+--
+-- Todo usuario nuevo recibe inicialmente acceso a Modira.
+-- En una futura fase de onboarding se podrá permitir que
+-- el usuario cree/seleccione su propia empresa.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     v_company_id UUID;
-    v_profile_id UUID;
 BEGIN
 
     SELECT id
     INTO v_company_id
     FROM public.companies
-    ORDER BY created_at
+    WHERE company_code = 'MODIRA-001'
     LIMIT 1;
 
-    IF v_company_id IS NULL THEN
-
-        SELECT id
-        INTO v_profile_id
-        FROM public.profiles
-        ORDER BY created_at
-        LIMIT 1;
-
-        INSERT INTO public.companies (
-            company_code,
-            company_name,
-            legal_name,
-            created_by,
-            updated_by
-        )
-        VALUES (
-            'MODIRA-001',
-            'Modira',
-            'Modira',
-            v_profile_id,
-            v_profile_id
-        )
-        RETURNING id INTO v_company_id;
-
-    END IF;
-
-    UPDATE public.profiles
-    SET company_id = v_company_id
-    WHERE company_id IS NULL;
-
-END $$;
-
-
--- =========================================================
--- 5. CLIENTS
--- =========================================================
-
-CREATE TABLE IF NOT EXISTS public.clients (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id UUID NOT NULL,
-    nombre TEXT NOT NULL,
-    empresa TEXT,
-    email VARCHAR(320),
-    telefono TEXT,
-    contacto_principal TEXT,
-    cif_vat TEXT,
-    direccion TEXT,
-    codigo_postal TEXT,
-    ciudad TEXT,
-    provincia TEXT,
-    pais TEXT DEFAULT 'ES',
-    sector TEXT,
-    notas TEXT,
-    etiquetas JSONB NOT NULL DEFAULT '[]'::jsonb,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT clients_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE
-);
-
-
--- =========================================================
--- 6. QUOTATIONS
--- =========================================================
-
-CREATE TABLE IF NOT EXISTS public.quotations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id UUID NOT NULL,
-    user_id UUID NOT NULL,
-    project_id UUID,
-    client_id UUID,
-    numero_presupuesto TEXT NOT NULL,
-    titulo TEXT NOT NULL,
-    descripcion_detallada TEXT,
-    servicios_incluidos JSONB NOT NULL DEFAULT '[]'::jsonb,
-    precio_base NUMERIC(12,2) NOT NULL DEFAULT 0,
-    iva_porcentaje NUMERIC(5,2) NOT NULL DEFAULT 21,
-    precio_total NUMERIC(12,2) NOT NULL DEFAULT 0,
-    estado VARCHAR(50) NOT NULL DEFAULT 'borrador',
-    fecha_emision TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    fecha_validez TIMESTAMPTZ,
-    notas TEXT,
-    stripe_session_id TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT quotations_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT quotations_user_id_fkey
-        FOREIGN KEY (user_id)
-        REFERENCES public.profiles(id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT quotations_project_id_fkey
-        FOREIGN KEY (project_id)
-        REFERENCES public.projects(id)
-        ON DELETE SET NULL,
-
-    CONSTRAINT quotations_client_id_fkey
-        FOREIGN KEY (client_id)
-        REFERENCES public.clients(id)
-        ON DELETE SET NULL,
-
-    CONSTRAINT quotations_company_number_unique
-        UNIQUE (company_id, numero_presupuesto)
-);
-
-
--- =========================================================
--- 7. PAYMENTS
--- =========================================================
-
-CREATE TABLE IF NOT EXISTS public.payments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id UUID NOT NULL,
-    user_id UUID NOT NULL,
-    invoice_id UUID,
-    stripe_invoice_id VARCHAR(255),
-    stripe_payment_intent_id VARCHAR(255),
-    amount INTEGER NOT NULL,
-    currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
-    status VARCHAR(50) NOT NULL,
-    description TEXT,
-    paid_at TIMESTAMPTZ,
-    due_date TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT payments_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT payments_user_id_fkey
-        FOREIGN KEY (user_id)
-        REFERENCES public.profiles(id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT payments_invoice_id_fkey
-        FOREIGN KEY (invoice_id)
-        REFERENCES public.invoices(id)
-        ON DELETE SET NULL
-);
-
-
--- =========================================================
--- 8. COMPANY_ID EN TABLAS EXISTENTES
--- =========================================================
-
-ALTER TABLE public.projects
-ADD COLUMN IF NOT EXISTS company_id UUID;
-
-ALTER TABLE public.invoices
-ADD COLUMN IF NOT EXISTS company_id UUID;
-
-ALTER TABLE public.budgets
-ADD COLUMN IF NOT EXISTS company_id UUID;
-
-ALTER TABLE public.support_tickets
-ADD COLUMN IF NOT EXISTS company_id UUID;
-
-ALTER TABLE public.automations
-ADD COLUMN IF NOT EXISTS company_id UUID;
-
-
--- =========================================================
--- 9. RELLENAR COMPANY_ID DE DATOS EXISTENTES
---
--- Se obtiene la company a través del user_id actual.
--- =========================================================
-
-UPDATE public.projects p
-SET company_id = pr.company_id
-FROM public.profiles pr
-WHERE p.user_id = pr.id
-  AND p.company_id IS NULL;
-
-UPDATE public.invoices i
-SET company_id = pr.company_id
-FROM public.profiles pr
-WHERE i.user_id = pr.id
-  AND i.company_id IS NULL;
-
-UPDATE public.budgets b
-SET company_id = pr.company_id
-FROM public.profiles pr
-WHERE b.user_id = pr.id
-  AND b.company_id IS NULL;
-
-UPDATE public.support_tickets s
-SET company_id = pr.company_id
-FROM public.profiles pr
-WHERE s.user_id = pr.id
-  AND s.company_id IS NULL;
-
-UPDATE public.automations a
-SET company_id = pr.company_id
-FROM public.profiles pr
-WHERE a.user_id = pr.id
-  AND a.company_id IS NULL;
-
-
--- =========================================================
--- 10. FOREIGN KEYS DE TABLAS EXISTENTES
--- =========================================================
-
-DO $$
-BEGIN
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'projects_company_id_fkey'
-    ) THEN
-        ALTER TABLE public.projects
-        ADD CONSTRAINT projects_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'invoices_company_id_fkey'
-    ) THEN
-        ALTER TABLE public.invoices
-        ADD CONSTRAINT invoices_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'budgets_company_id_fkey'
-    ) THEN
-        ALTER TABLE public.budgets
-        ADD CONSTRAINT budgets_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'support_tickets_company_id_fkey'
-    ) THEN
-        ALTER TABLE public.support_tickets
-        ADD CONSTRAINT support_tickets_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'automations_company_id_fkey'
-    ) THEN
-        ALTER TABLE public.automations
-        ADD CONSTRAINT automations_company_id_fkey
-        FOREIGN KEY (company_id)
-        REFERENCES public.companies(id)
-        ON DELETE CASCADE;
-    END IF;
-
-END $$;
-
-
--- =========================================================
--- 11. COMPROBAR QUE LOS DATOS EXISTENTES TIENEN COMPANY
--- =========================================================
-
-DO $$
-BEGIN
-
-    IF EXISTS (
-        SELECT 1
-        FROM public.projects
-        WHERE company_id IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migration stopped: projects contains rows without company_id';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM public.invoices
-        WHERE company_id IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migration stopped: invoices contains rows without company_id';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM public.budgets
-        WHERE company_id IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migration stopped: budgets contains rows without company_id';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM public.support_tickets
-        WHERE company_id IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migration stopped: support_tickets contains rows without company_id';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM public.automations
-        WHERE company_id IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migration stopped: automations contains rows without company_id';
-    END IF;
-
-END $$;
-
-
--- =========================================================
--- 12. ÍNDICES
--- =========================================================
-
-CREATE INDEX IF NOT EXISTS idx_profiles_company_id
-ON public.profiles(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_clients_company_id
-ON public.clients(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_projects_company_id
-ON public.projects(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_invoices_company_id
-ON public.invoices(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_quotations_company_id
-ON public.quotations(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_payments_company_id
-ON public.payments(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_budgets_company_id
-ON public.budgets(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_support_tickets_company_id
-ON public.support_tickets(company_id);
-
-CREATE INDEX IF NOT EXISTS idx_automations_company_id
-ON public.automations(company_id);
-
-
--- =========================================================
--- 13. FUNCIÓN PARA UPDATED_AT
--- =========================================================
+    INSERT INTO public.profiles (
+        id,
+        nombre,
+        company_id,
+        rol
+    )
+    VALUES (
+        NEW.id,
+        COALESCE(
+            NULLIF(NEW.raw_user_meta_data->>'nombre', ''),
+            NULLIF(NEW.raw_user_meta_data->>'name', ''),
+            NEW.email,
+            'Usuario'
+        ),
+        v_company_id,
+        'user'
+    )
+    ON CONFLICT (id) DO NOTHING;
+
+    RETURN NEW;
+END;
+$$;
+
+
+DROP TRIGGER IF EXISTS on_auth_user_created
+ON auth.users;
+
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_new_user();
+
+
+-- ============================================================
+-- 15. FUNCIÓN UPDATED_AT
+-- ============================================================
 
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER
@@ -475,49 +589,127 @@ END;
 $$;
 
 
--- =========================================================
--- 14. TRIGGERS UPDATED_AT
--- =========================================================
-
-DROP TRIGGER IF EXISTS companies_updated_at
-ON public.companies;
+-- ============================================================
+-- 16. TRIGGERS UPDATED_AT
+-- ============================================================
 
 CREATE TRIGGER companies_updated_at
 BEFORE UPDATE ON public.companies
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
-
-DROP TRIGGER IF EXISTS clients_updated_at
-ON public.clients;
+CREATE TRIGGER profiles_updated_at
+BEFORE UPDATE ON public.profiles
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER clients_updated_at
 BEFORE UPDATE ON public.clients
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
-
-DROP TRIGGER IF EXISTS quotations_updated_at
-ON public.quotations;
+CREATE TRIGGER projects_updated_at
+BEFORE UPDATE ON public.projects
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER quotations_updated_at
 BEFORE UPDATE ON public.quotations
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
-
-DROP TRIGGER IF EXISTS payments_updated_at
-ON public.payments;
+CREATE TRIGGER invoices_updated_at
+BEFORE UPDATE ON public.invoices
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER payments_updated_at
 BEFORE UPDATE ON public.payments
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+CREATE TRIGGER budgets_updated_at
+BEFORE UPDATE ON public.budgets
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
 
--- =========================================================
--- 15. FUNCIÓN RLS
--- =========================================================
+CREATE TRIGGER support_tickets_updated_at
+BEFORE UPDATE ON public.support_tickets
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER automations_updated_at
+BEFORE UPDATE ON public.automations
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+
+
+-- ============================================================
+-- 17. ÍNDICES
+-- ============================================================
+
+CREATE INDEX idx_profiles_company_id
+    ON public.profiles(company_id);
+
+CREATE INDEX idx_clients_company_id
+    ON public.clients(company_id);
+
+CREATE INDEX idx_projects_company_id
+    ON public.projects(company_id);
+
+CREATE INDEX idx_projects_client_id
+    ON public.projects(client_id);
+
+CREATE INDEX idx_quotations_company_id
+    ON public.quotations(company_id);
+
+CREATE INDEX idx_quotations_client_id
+    ON public.quotations(client_id);
+
+CREATE INDEX idx_quotations_project_id
+    ON public.quotations(project_id);
+
+CREATE INDEX idx_invoices_company_id
+    ON public.invoices(company_id);
+
+CREATE INDEX idx_invoices_client_id
+    ON public.invoices(client_id);
+
+CREATE INDEX idx_invoices_project_id
+    ON public.invoices(project_id);
+
+CREATE INDEX idx_invoices_quotation_id
+    ON public.invoices(quotation_id);
+
+CREATE INDEX idx_payments_company_id
+    ON public.payments(company_id);
+
+CREATE INDEX idx_payments_invoice_id
+    ON public.payments(invoice_id);
+
+CREATE INDEX idx_payments_quotation_id
+    ON public.payments(quotation_id);
+
+CREATE INDEX idx_budgets_company_id
+    ON public.budgets(company_id);
+
+CREATE INDEX idx_budgets_project_id
+    ON public.budgets(project_id);
+
+CREATE INDEX idx_support_tickets_company_id
+    ON public.support_tickets(company_id);
+
+CREATE INDEX idx_automations_company_id
+    ON public.automations(company_id);
+
+
+-- ============================================================
+-- 18. FUNCIÓN SEGURA PARA OBTENER LA EMPRESA DEL USUARIO
+--
+-- IMPORTANTE:
+-- SECURITY DEFINER evita la recursión RLS de profiles.
+-- No hace SELECT sobre profiles desde una policy directamente.
+-- ============================================================
 
 CREATE OR REPLACE FUNCTION public.current_user_company_id()
 RETURNS UUID
@@ -526,17 +718,36 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-    SELECT company_id
-    FROM public.profiles
-    WHERE id = auth.uid()
-      AND company_id IS NOT NULL
+    SELECT p.company_id
+    FROM public.profiles p
+    WHERE p.id = auth.uid()
     LIMIT 1;
 $$;
 
 
--- =========================================================
--- 16. RLS
--- =========================================================
+-- ============================================================
+-- 19. FUNCIÓN PARA SABER SI EL USUARIO ES ADMIN
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.current_user_is_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.profiles p
+        WHERE p.id = auth.uid()
+          AND p.rol = 'admin'
+    );
+$$;
+
+
+-- ============================================================
+-- 20. RLS
+-- ============================================================
 
 ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -550,96 +761,46 @@ ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.automations ENABLE ROW LEVEL SECURITY;
 
 
--- =========================================================
--- 17. ELIMINAR POLÍTICAS ANTERIORES
+-- ============================================================
+-- 21. COMPANIES POLICIES
+-- ============================================================
+
+CREATE POLICY companies_select_own
+ON public.companies
+FOR SELECT
+TO authenticated
+USING (
+    id = public.current_user_company_id()
+);
+
+CREATE POLICY companies_update_own
+ON public.companies
+FOR UPDATE
+TO authenticated
+USING (
+    id = public.current_user_company_id()
+)
+WITH CHECK (
+    id = public.current_user_company_id()
+);
+
+
+-- ============================================================
+-- 22. PROFILES POLICIES
 --
--- Solo para estas tablas. No afecta a los datos.
--- =========================================================
+-- No se consulta profiles dentro de la propia policy.
+-- Esto evita la recursión que provocaba el error anterior.
+-- ============================================================
 
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR r IN
-        SELECT schemaname, tablename, policyname
-        FROM pg_policies
-        WHERE schemaname = 'public'
-          AND tablename IN (
-              'companies',
-              'profiles',
-              'clients',
-              'projects',
-              'quotations',
-              'invoices',
-              'payments',
-              'budgets',
-              'support_tickets',
-              'automations'
-          )
-    LOOP
-        EXECUTE format(
-            'DROP POLICY IF EXISTS %I ON %I.%I',
-            r.policyname,
-            r.schemaname,
-            r.tablename
-        );
-    END LOOP;
-END $$;
-
-
--- =========================================================
--- 18. POLÍTICAS COMPANIES
--- =========================================================
-
-CREATE POLICY companies_select
-ON public.companies
-FOR SELECT
-TO authenticated
-USING (
-    id = public.current_user_company_id()
-);
-
-CREATE POLICY companies_insert
-ON public.companies
-FOR INSERT
-TO authenticated
-WITH CHECK (
-    created_by = auth.uid()
-);
-
-CREATE POLICY companies_update
-ON public.companies
-FOR UPDATE
-TO authenticated
-USING (
-    id = public.current_user_company_id()
-)
-WITH CHECK (
-    id = public.current_user_company_id()
-);
-
-
--- =========================================================
--- 19. POLÍTICAS PROFILES
--- =========================================================
-
-CREATE POLICY profiles_select
+CREATE POLICY profiles_select_own
 ON public.profiles
 FOR SELECT
 TO authenticated
 USING (
     id = auth.uid()
-    OR (
-        company_id IS NOT NULL 
-        AND company_id IN (
-            SELECT p.company_id 
-            FROM public.profiles p 
-            WHERE p.id = auth.uid()
-        )
-    )
 );
 
-CREATE POLICY profiles_insert
+CREATE POLICY profiles_insert_own
 ON public.profiles
 FOR INSERT
 TO authenticated
@@ -647,7 +808,7 @@ WITH CHECK (
     id = auth.uid()
 );
 
-CREATE POLICY profiles_update
+CREATE POLICY profiles_update_own
 ON public.profiles
 FOR UPDATE
 TO authenticated
@@ -659,9 +820,9 @@ WITH CHECK (
 );
 
 
--- =========================================================
--- 20. POLÍTICAS TABLAS MULTIEMPRESA
--- =========================================================
+-- ============================================================
+-- 23. CLIENTS POLICIES
+-- ============================================================
 
 CREATE POLICY clients_company_access
 ON public.clients
@@ -675,6 +836,10 @@ WITH CHECK (
 );
 
 
+-- ============================================================
+-- 24. PROJECTS POLICIES
+-- ============================================================
+
 CREATE POLICY projects_company_access
 ON public.projects
 FOR ALL
@@ -686,6 +851,10 @@ WITH CHECK (
     company_id = public.current_user_company_id()
 );
 
+
+-- ============================================================
+-- 25. QUOTATIONS POLICIES
+-- ============================================================
 
 CREATE POLICY quotations_company_access
 ON public.quotations
@@ -699,6 +868,10 @@ WITH CHECK (
 );
 
 
+-- ============================================================
+-- 26. INVOICES POLICIES
+-- ============================================================
+
 CREATE POLICY invoices_company_access
 ON public.invoices
 FOR ALL
@@ -710,6 +883,10 @@ WITH CHECK (
     company_id = public.current_user_company_id()
 );
 
+
+-- ============================================================
+-- 27. PAYMENTS POLICIES
+-- ============================================================
 
 CREATE POLICY payments_company_access
 ON public.payments
@@ -723,6 +900,10 @@ WITH CHECK (
 );
 
 
+-- ============================================================
+-- 28. BUDGETS POLICIES
+-- ============================================================
+
 CREATE POLICY budgets_company_access
 ON public.budgets
 FOR ALL
@@ -734,6 +915,10 @@ WITH CHECK (
     company_id = public.current_user_company_id()
 );
 
+
+-- ============================================================
+-- 29. SUPPORT TICKETS POLICIES
+-- ============================================================
 
 CREATE POLICY support_tickets_company_access
 ON public.support_tickets
@@ -747,6 +932,10 @@ WITH CHECK (
 );
 
 
+-- ============================================================
+-- 30. AUTOMATIONS POLICIES
+-- ============================================================
+
 CREATE POLICY automations_company_access
 ON public.automations
 FOR ALL
@@ -757,6 +946,88 @@ USING (
 WITH CHECK (
     company_id = public.current_user_company_id()
 );
+
+
+-- ============================================================
+-- 31. COMMENTS
+-- ============================================================
+
+COMMENT ON TABLE public.companies IS
+'Empresas/organizaciones de Modira. Unidad principal de aislamiento multiempresa.';
+
+COMMENT ON TABLE public.profiles IS
+'Perfil de usuario asociado a Supabase Auth y a una empresa.';
+
+COMMENT ON TABLE public.clients IS
+'Clientes gestionados por cada empresa de Modira.';
+
+COMMENT ON TABLE public.projects IS
+'Proyectos pertenecientes a una empresa y opcionalmente a un cliente.';
+
+COMMENT ON TABLE public.quotations IS
+'Presupuestos comerciales de cada empresa.';
+
+COMMENT ON TABLE public.invoices IS
+'Facturas de cada empresa.';
+
+COMMENT ON TABLE public.payments IS
+'Pagos asociados a facturas o presupuestos.';
+
+COMMENT ON TABLE public.budgets IS
+'Presupuestos internos/proyectos de cada empresa.';
+
+COMMENT ON TABLE public.support_tickets IS
+'Tickets de soporte de los usuarios de Modira.';
+
+COMMENT ON TABLE public.automations IS
+'Automatizaciones configuradas por empresa.';
+
+
+-- ============================================================
+-- 32. VERIFICACIONES FINALES
+-- ============================================================
+
+DO $$
+DECLARE
+    v_tables INTEGER;
+    v_company_id UUID;
+BEGIN
+
+    SELECT COUNT(*)
+    INTO v_tables
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name IN (
+          'companies',
+          'profiles',
+          'clients',
+          'projects',
+          'quotations',
+          'invoices',
+          'payments',
+          'budgets',
+          'support_tickets',
+          'automations'
+      );
+
+    IF v_tables <> 10 THEN
+        RAISE EXCEPTION
+            'Initial migration failed: expected 10 public tables, found %',
+            v_tables;
+    END IF;
+
+    SELECT id
+    INTO v_company_id
+    FROM public.companies
+    WHERE company_code = 'MODIRA-001'
+    LIMIT 1;
+
+    IF v_company_id IS NULL THEN
+        RAISE EXCEPTION
+            'Initial migration failed: Modira company was not created';
+    END IF;
+
+END $$;
 
 
 COMMIT;
