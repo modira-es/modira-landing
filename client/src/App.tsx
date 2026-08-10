@@ -1,3 +1,4 @@
+import ClientRoute from "@/components/ClientRoute";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -35,12 +36,50 @@ function Router() {
       <Route path="/admin" component={AdminPanel} />
       <Route path="/admin/presupuestos" component={AdminQuotations} />
       <Route path="/presupuesto/:id" component={QuotationView} />
-      <Route path="/area-cliente" component={() => <ProtectedRoute><ClientArea /></ProtectedRoute>} />
-      <Route path="/area-cliente/proyectos" component={() => <ProtectedRoute><Projects /></ProtectedRoute>} />
-      <Route path="/area-cliente/presupuestos" component={() => <ProtectedRoute><Quotations /></ProtectedRoute>} />
-      <Route path="/area-cliente/facturacion" component={() => <ProtectedRoute><Billing /></ProtectedRoute>} />
-      <Route path="/area-cliente/soporte" component={() => <ProtectedRoute><Support /></ProtectedRoute>} />
-      
+      <Route
+  path="/area-cliente"
+  component={() => (
+    <ClientRoute>
+      <ClientArea />
+    </ClientRoute>
+  )}
+/>
+
+<Route
+  path="/area-cliente/proyectos"
+  component={() => (
+    <ClientRoute>
+      <Projects />
+    </ClientRoute>
+  )}
+/>
+
+<Route
+  path="/area-cliente/presupuestos"
+  component={() => (
+    <ClientRoute>
+      <Quotations />
+    </ClientRoute>
+  )}
+/>
+
+<Route
+  path="/area-cliente/facturacion"
+  component={() => (
+    <ClientRoute>
+      <Billing />
+    </ClientRoute>
+  )}
+/>
+
+<Route
+  path="/area-cliente/soporte"
+  component={() => (
+    <ClientRoute>
+      <Support />
+    </ClientRoute>
+  )}
+/>
       {/* Rutas de Empleados */}
       <Route path="/empleados/login" component={EmployeeAuth} />
       <Route path="/area-empleados" component={() => <EmployeeRoute><EmployeeArea /></EmployeeRoute>} />
