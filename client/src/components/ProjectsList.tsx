@@ -38,99 +38,75 @@ export default function ProjectsList() {
     fecha_fin: "",
   });
 
-  const fetchProjects = async () => {
-    if (!user) return;
+ 
+const fetchProjects = async () => {
+  if (!user) return;
 
-    try {
-      setLoading(true);
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
+  try {
+    setLoading(true);
 
-      if (profileError) throw profileError;
+    const { data, error: fetchError } = await supabase
+      .from("projects")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      const companyId = profileData?.company_id;
+    if (fetchError) throw fetchError;
 
-      let query = supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false });
+    setProjects(data || []);
+    setError(null);
+  } catch (err: any) {
+    console.error("Error fetching projects:", err);
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
-      if (companyId) {
-        query = query.eq("company_id", companyId);
-      } else {
-        query = query.eq("user_id", user.id);
-      }
 
-      const { data, error: fetchError } = await query;
 
-      if (fetchError) throw fetchError;
-      setProjects(data || []);
-      setError(null);
-    } catch (err: any) {
-      console.error("Error fetching projects:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchProjects();
   }, [user]);
 
-  const handleCreateProject = async () => {
-    if (!user || !createForm.nombre.trim()) {
-      toast.error("El nombre del proyecto es obligatorio");
-      return;
-    }
+const handleCreateProject = async () => {
+  if (!user || !createForm.nombre.trim()) {
+    toast.error("El nombre del proyecto es obligatorio");
+    return;
+  }
 
-    try {
-      setIsCreating(true);
+  try {
+    setIsCreating(true);
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
-
-      const companyId = profileData?.company_id;
-
-      const newProject = {
-        nombre: createForm.nombre,
-        descripcion: createForm.descripcion || null,
-        estado: "activo",
-        fecha_inicio: new Date(createForm.fecha_inicio).toISOString(),
-        fecha_fin: createForm.fecha_fin ? new Date(createForm.fecha_fin).toISOString() : null,
-        user_id: user.id,
-        company_id: companyId || null,
-      };
-
-      const { data, error: insertError } = await supabase
-        .from("projects")
-        .insert([newProject])
-        .select();
-
-      if (insertError) throw insertError;
-
-      toast.success("Proyecto creado correctamente");
-      setIsCreateDialogOpen(false);
-      setCreateForm({
-        nombre: "",
-        descripcion: "",
-        fecha_inicio: new Date().toISOString().split("T")[0],
-        fecha_fin: "",
+    const { error: insertError } = await supabase
+      .rpc("create_project", {
+        p_nombre: createForm.nombre.trim(),
+        p_descripcion: createForm.descripcion.trim() || null,
+        p_fecha_inicio: new Date(createForm.fecha_inicio).toISOString(),
+        p_fecha_fin: createForm.fecha_fin
+          ? new Date(createForm.fecha_fin).toISOString()
+          : null,
       });
-      fetchProjects();
-    } catch (err: any) {
-      console.error("Error creating project:", err);
-      toast.error(`Error al crear el proyecto: ${err.message}`);
-    } finally {
-      setIsCreating(false);
-    }
-  };
+
+    if (insertError) throw insertError;
+
+    toast.success("Proyecto creado correctamente");
+    setIsCreateDialogOpen(false);
+    setCreateForm({
+      nombre: "",
+      descripcion: "",
+      fecha_inicio: new Date().toISOString().split("T")[0],
+      fecha_fin: "",
+    });
+
+    fetchProjects();
+  } catch (err: any) {
+    console.error("Error creating project:", err);
+    toast.error(`Error al crear el proyecto: ${err.message}`);
+  } finally {
+    setIsCreating(false);
+  }
+};
 
   const getStatusBadge = (estado: Project["estado"]) => {
     switch (estado) {
