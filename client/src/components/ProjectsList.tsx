@@ -1,0 +1,397 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Zap, Plus, Search, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { useLocation } from "wouter";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+
+interface Project {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  estado: "activo" | "pausado" | "completado";
+  fecha_inicio: string;
+  fecha_fin: string | null;
+  created_at: string;
+}
+
+export default function ProjectsList() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    nombre: "",
+    descripcion: "",
+    fecha_inicio: new Date().toISOString().split("T")[0],
+    fecha_fin: "",
+  });
+
+  const fetchProjects = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      const companyId = profileData?.company_id;
+
+      let query = supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (companyId) {
+        query = query.eq("company_id", companyId);
+      } else {
+        query = query.eq("user_id", user.id);
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) throw fetchError;
+      setProjects(data || []);
+      setError(null);
+    } catch (err: any) {
+      console.error("Error fetching projects:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, [user]);
+
+  const handleCreateProject = async () => {
+    if (!user || !createForm.nombre.trim()) {
+      toast.error("El nombre del proyecto es obligatorio");
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      const companyId = profileData?.company_id;
+
+      const newProject = {
+        nombre: createForm.nombre,
+        descripcion: createForm.descripcion || null,
+        estado: "activo",
+        fecha_inicio: new Date(createForm.fecha_inicio).toISOString(),
+        fecha_fin: createForm.fecha_fin ? new Date(createForm.fecha_fin).toISOString() : null,
+        user_id: user.id,
+        company_id: companyId || null,
+      };
+
+      const { data, error: insertError } = await supabase
+        .from("projects")
+        .insert([newProject])
+        .select();
+
+      if (insertError) throw insertError;
+
+      toast.success("Proyecto creado correctamente");
+      setIsCreateDialogOpen(false);
+      setCreateForm({
+        nombre: "",
+        descripcion: "",
+        fecha_inicio: new Date().toISOString().split("T")[0],
+        fecha_fin: "",
+      });
+      fetchProjects();
+    } catch (err: any) {
+      console.error("Error creating project:", err);
+      toast.error(`Error al crear el proyecto: ${err.message}`);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const getStatusBadge = (estado: Project["estado"]) => {
+    switch (estado) {
+      case "activo":
+        return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none">🟢 Activo</Badge>;
+      case "pausado":
+        return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100 border-none">🟡 Pausado</Badge>;
+      case "completado":
+        return <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none">🟢 Completado</Badge>;
+      default:
+        return <Badge variant="outline">{estado}</Badge>;
+    }
+  };
+
+  const filteredProjects = projects.filter(p =>
+    p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (p.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
+  );
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-[#102A66] to-[#173B8F] text-white py-8">
+        <div className="container mx-auto px-4">
+          <Button
+            onClick={() => setLocation("/area-cliente")}
+            variant="ghost"
+            className="text-white hover:bg-white/10 mb-4 flex gap-2 items-center"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver al Área de Clientes
+          </Button>
+          <h1 className="text-4xl font-bold">Mis Proyectos</h1>
+          <p className="text-white/80 mt-2">Gestiona y revisa el estado de tus automatizaciones y proyectos activos</p>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-12">
+        {error && (
+          <Card className="p-4 border-red-200 bg-red-50 text-red-700 mb-8 flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+            <span>Error: {error}</span>
+          </Card>
+        )}
+
+        {/* Search and Create */}
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#52627A]" />
+            <input
+              type="text"
+              placeholder="Buscar proyectos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-[#E8ECF2] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#173B8F] bg-white"
+            />
+          </div>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#173B8F] hover:bg-[#102A66] text-white flex gap-2 items-center whitespace-nowrap">
+                <Plus className="h-4 w-4" />
+                Crear Proyecto
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Crear Nuevo Proyecto</DialogTitle>
+                <DialogDescription>Completa los detalles de tu nuevo proyecto de automatización.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="nombre">Nombre del Proyecto *</Label>
+                  <Input
+                    id="nombre"
+                    placeholder="Ej: Automatización de facturas"
+                    value={createForm.nombre}
+                    onChange={(e) => setCreateForm({ ...createForm, nombre: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="descripcion">Descripción</Label>
+                  <Textarea
+                    id="descripcion"
+                    placeholder="Ej: Automatización del proceso de generación y envío de facturas"
+                    value={createForm.descripcion}
+                    onChange={(e) => setCreateForm({ ...createForm, descripcion: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
+                  <Input
+                    id="fecha_inicio"
+                    type="date"
+                    value={createForm.fecha_inicio}
+                    onChange={(e) => setCreateForm({ ...createForm, fecha_inicio: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="fecha_fin">Fecha de Finalización (Opcional)</Label>
+                  <Input
+                    id="fecha_fin"
+                    type="date"
+                    value={createForm.fecha_fin}
+                    onChange={(e) => setCreateForm({ ...createForm, fecha_fin: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-[#173B8F] hover:bg-[#102A66] text-white"
+                  onClick={handleCreateProject}
+                  disabled={isCreating}
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creando...
+                    </>
+                  ) : (
+                    "Crear Proyecto"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Projects Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <Loader2 className="h-12 w-12 text-[#173B8F] animate-spin mx-auto mb-4" />
+              <p className="text-[#52627A]">Cargando tus proyectos...</p>
+            </div>
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <Card className="p-12 text-center border-dashed border-2 border-[#E8ECF2] bg-[#F4F6F9]">
+            <div className="mx-auto w-16 h-16 bg-[#173B8F]/10 rounded-full flex items-center justify-center mb-4">
+              <Zap className="h-8 w-8 text-[#173B8F]" />
+            </div>
+            <h3 className="text-lg font-bold text-[#102A66]">No hay proyectos aún</h3>
+            <p className="text-[#52627A] mt-2 max-w-sm mx-auto">
+              Comienza creando tu primer proyecto de automatización para optimizar tu negocio.
+            </p>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="mt-6 bg-[#173B8F] hover:bg-[#102A66] text-white">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Crear mi primer proyecto
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Crear Nuevo Proyecto</DialogTitle>
+                  <DialogDescription>Completa los detalles de tu nuevo proyecto de automatización.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="nombre">Nombre del Proyecto *</Label>
+                    <Input
+                      id="nombre"
+                      placeholder="Ej: Automatización de facturas"
+                      value={createForm.nombre}
+                      onChange={(e) => setCreateForm({ ...createForm, nombre: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="descripcion">Descripción</Label>
+                    <Textarea
+                      id="descripcion"
+                      placeholder="Ej: Automatización del proceso de generación y envío de facturas"
+                      value={createForm.descripcion}
+                      onChange={(e) => setCreateForm({ ...createForm, descripcion: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
+                    <Input
+                      id="fecha_inicio"
+                      type="date"
+                      value={createForm.fecha_inicio}
+                      onChange={(e) => setCreateForm({ ...createForm, fecha_inicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="fecha_fin">Fecha de Finalización (Opcional)</Label>
+                    <Input
+                      id="fecha_fin"
+                      type="date"
+                      value={createForm.fecha_fin}
+                      onChange={(e) => setCreateForm({ ...createForm, fecha_fin: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    className="bg-[#173B8F] hover:bg-[#102A66] text-white"
+                    onClick={handleCreateProject}
+                    disabled={isCreating}
+                  >
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Creando...
+                      </>
+                    ) : (
+                      "Crear Proyecto"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProjects.map((project) => (
+              <Card key={project.id} className="p-6 border border-[#E8ECF2] hover:border-[#173B8F] hover:shadow-lg transition-all duration-300">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-[#173B8F]/10 p-3 rounded-lg text-[#173B8F]">
+                    <Zap className="w-5 h-5" />
+                  </div>
+                  {getStatusBadge(project.estado)}
+                </div>
+                <h3 className="text-xl font-bold text-[#102A66] mb-2">{project.nombre}</h3>
+                <p className="text-[#52627A] text-sm line-clamp-2 mb-4">
+                  {project.descripcion || "Sin descripción disponible."}
+                </p>
+                <div className="pt-4 border-t border-[#E8ECF2]">
+                  <div className="space-y-2 text-xs text-[#52627A] mb-4">
+                    <div className="flex justify-between">
+                      <span>Inicio:</span>
+                      <span className="font-semibold">{new Date(project.fecha_inicio).toLocaleDateString("es-ES")}</span>
+                    </div>
+                    {project.fecha_fin && (
+                      <div className="flex justify-between">
+                        <span>Finalización:</span>
+                        <span className="font-semibold">{new Date(project.fecha_fin).toLocaleDateString("es-ES")}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-[#102A66] text-white py-8 mt-20">
+        <div className="container mx-auto px-4 text-center text-white/70 text-sm">
+          <p>© 2024 Modira. Todos los derechos reservados.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import EmployeeAreaHeader from "@/components/EmployeeAreaHeader";
+import EmployeeProjects from "@/components/EmployeeProjects";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,9 @@ export default function EmployeeArea() {
       <EmployeeAreaHeader userName={workerName || "Trabajador"} onLogout={handleLogout} />
 
       <main className="container mx-auto px-4 py-12 space-y-12">
+        {/* Proyectos Section */}
+        <EmployeeProjects />
+
         {/* Auditorías Section */}
         <section className="space-y-6">
           <div className="flex items-center justify-between">

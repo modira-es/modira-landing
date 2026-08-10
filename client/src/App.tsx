@@ -15,7 +15,7 @@ import QuotationView from "./pages/QuotationView";
 import ClientArea from "./pages/ClientArea";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Billing from "./pages/Billing";
-import Projects from "./pages/Projects";
+import ProjectsList from "./components/ProjectsList";
 import Quotations from "./pages/Quotations";
 import Support from "./pages/Support";
 import EmployeeAuth from "./pages/EmployeeAuth";
@@ -49,7 +49,7 @@ function Router() {
   path="/area-cliente/proyectos"
   component={() => (
     <ClientRoute>
-      <Projects />
+      <ProjectsList />
     </ClientRoute>
   )}
 />
