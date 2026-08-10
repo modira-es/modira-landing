@@ -156,6 +156,24 @@ export default function EmployeeProjects() {
     }
   };
 
+const getStatusSelectClass = (status: string) => {
+  switch (status) {
+    case "Pendiente":
+      return "bg-slate-100 text-slate-700";
+    case "Activo":
+      return "bg-emerald-100 text-emerald-700";
+    case "Pausado":
+      return "bg-amber-100 text-amber-700";
+    case "Entregado":
+      return "bg-blue-100 text-blue-700";
+    case "Completado":
+      return "bg-purple-100 text-purple-700";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+};
+
+
   // Extract unique companies for the filter
   const uniqueCompanies = Array.from(new Set(projects.map(p => p.empresa_nombre))).sort();
 
@@ -313,18 +331,16 @@ export default function EmployeeProjects() {
                     </p>
                   </div>
                   
-                  <div className="flex flex-col items-end gap-3">
-                    <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider mb-1">Estado del Proyecto</span>
-                      {getStatusBadge(project.estado)}
-                    </div>
+                  
                     
                     <Select
                       value={project.estado}
                       onValueChange={(value) => handleStatusChange(project.id, value)}
                       disabled={updatingId === project.id}
                     >
-                      <SelectTrigger className="w-[150px] h-9 text-xs border-[#E8ECF2]">
+                      <SelectTrigger
+  className={`w-[150px] h-9 text-xs border-[#E8ECF2] ${getStatusSelectClass(project.estado)}`}
+>
                         <SelectValue placeholder="Cambiar estado" />
                       </SelectTrigger>
                       <SelectContent>
@@ -361,7 +377,7 @@ export default function EmployeeProjects() {
                       <Building2 className="h-3.5 w-3.5" />
                       <span className="text-[10px] font-bold uppercase tracking-wider">Empresa</span>
                     </div>
-                    <p className="text-sm font-semibold text-[#1E293B]">{project.empresa_nombre}</p>
+                    <p className="text-sm font-semibold text-[#1E293B]">{project.empresa_nombre || "Sin empresa"}</p>
                   </div>
                   
                   <div className="space-y-1.5">
@@ -375,7 +391,7 @@ export default function EmployeeProjects() {
                     </div>
                   </div>
                 </div>
-              </div>
+              
             </Card>
           ))}
         </div>
