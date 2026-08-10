@@ -102,20 +102,7 @@ GRANT EXECUTE ON FUNCTION public.create_project(TEXT, TIMESTAMPTZ, TIMESTAMPTZ) 
 REVOKE EXECUTE ON FUNCTION public.create_project(TEXT, TIMESTAMPTZ, TIMESTAMPTZ) FROM anon;
 
 
--- 3. ACCESO A COMPAÑÍAS PARA TRABAJADORES
--- ------------------------------------------------------------
--- Corregir el error "permission denied for table companies" en el Área de Empleados.
-
-CREATE POLICY companies_worker_select
-ON public.companies
-FOR SELECT
-TO authenticated
-USING (
-    public.current_user_is_worker()
-);
-
-
--- 4. ACTUALIZACIÓN DE POLÍTICAS DE UPDATE PARA PROJECTS
+-- 3. ACTUALIZACIÓN DE POLÍTICAS DE UPDATE PARA PROJECTS
 -- ------------------------------------------------------------
 -- El trabajador debe poder modificar el título y el estado.
 
@@ -142,7 +129,7 @@ ON public.projects
 TO authenticated;
 
 
--- 5. FUNCIÓN SEGURA PARA OBTENER DATOS DE CLIENTES (PARA TRABAJADORES)
+-- 4. FUNCIÓN SEGURA PARA OBTENER DATOS DE CLIENTES (PARA TRABAJADORES)
 -- ------------------------------------------------------------
 -- Permite obtener nombre, email y empresa del cliente de forma segura.
 
@@ -163,7 +150,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, pg_temp
 AS $$
 BEGIN
     -- Verificar que el que llama es trabajador activo
