@@ -16,8 +16,12 @@ export default function EmployeeArea() {
   const [workerName, setWorkerName] = useState("");
   const [auditRequests, setAuditRequests] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [tickets, setTickets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+const [tickets, setTickets] = useState<any[]>([]);
+const [loading, setLoading] = useState(true);
+
+const [activeTab, setActiveTab] = useState<
+  "projects" | "billing" | "audits" | "tickets"
+>("projects");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -90,11 +94,72 @@ export default function EmployeeArea() {
     <div className="min-h-screen bg-[#F5F7FA]">
       <EmployeeAreaHeader userName={workerName || "Trabajador"} onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-12 space-y-12">
-        {/* Proyectos Section */}
-        <EmployeeProjects />
+      <main className="container mx-auto px-4 py-12">
+
+  {/* Navegación del Área de Empleados */}
+  <div className="mb-10 border-b border-gray-200">
+    <div className="flex gap-8 overflow-x-auto">
+
+      <button
+        type="button"
+        onClick={() => setActiveTab("projects")}
+        className={`pb-4 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+          activeTab === "projects"
+            ? "border-[#1E3A8A] text-[#1E3A8A]"
+            : "border-transparent text-gray-500 hover:text-[#1E3A8A]"
+        }`}
+      >
+        Proyectos
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setActiveTab("billing")}
+        className={`pb-4 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+          activeTab === "billing"
+            ? "border-[#1E3A8A] text-[#1E3A8A]"
+            : "border-transparent text-gray-500 hover:text-[#1E3A8A]"
+        }`}
+      >
+        Facturación
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setActiveTab("audits")}
+        className={`pb-4 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+          activeTab === "audits"
+            ? "border-[#1E3A8A] text-[#1E3A8A]"
+            : "border-transparent text-gray-500 hover:text-[#1E3A8A]"
+        }`}
+      >
+        Auditorías
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setActiveTab("tickets")}
+        className={`pb-4 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+          activeTab === "tickets"
+            ? "border-[#1E3A8A] text-[#1E3A8A]"
+            : "border-transparent text-gray-500 hover:text-[#1E3A8A]"
+        }`}
+      >
+        Tickets
+      </button>
+
+    </div>
+  </div>
+
+  {/* Contenido de las pestañas */}
+
+  {/* Proyectos */}
+  <div hidden={activeTab !== "projects"}>
+    <EmployeeProjects />
+  </div>
 
         {/* Auditorías Section */}
+        <div hidden={activeTab !== "audits"}>
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-[#1E3A8A]">Solicitudes de auditoría</h2>
@@ -147,8 +212,10 @@ export default function EmployeeArea() {
             </div>
           </Card>
         </section>
+        </div>
 
         {/* Facturas Section */}
+        <div hidden={activeTab !== "billing"}>
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-[#1E3A8A]">Facturas</h2>
@@ -210,8 +277,10 @@ export default function EmployeeArea() {
             </div>
           </Card>
         </section>
+        </div>
 
         {/* Tickets Section */}
+        <div hidden={activeTab !== "tickets"}>
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-[#1E3A8A]">Tickets de soporte</h2>
@@ -269,6 +338,7 @@ export default function EmployeeArea() {
             </div>
           </Card>
         </section>
+        </div>
       </main>
 
       <footer className="bg-white border-t py-8 mt-12">
