@@ -16,6 +16,7 @@ export default function EmployeeArea() {
   const [workerName, setWorkerName] = useState("");
   const [auditRequests, setAuditRequests] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [invoiceCompanyFilter, setInvoiceCompanyFilter] = useState("all");
 const [invoiceProjectFilter, setInvoiceProjectFilter] = useState("all");
 const invoiceCompanies = Array.from(
@@ -57,6 +58,23 @@ const [activeTab, setActiveTab] = useState<
   "projects" | "billing" | "audits" | "tickets"
 >("projects");
 
+const [showCreateInvoice, setShowCreateInvoice] = useState(false);
+
+const [generatedInvoiceNumber, setGeneratedInvoiceNumber] = useState("");
+const [creatingInvoice, setCreatingInvoice] = useState(false);
+const [invoiceError, setInvoiceError] = useState("");
+
+const [invoiceForm, setInvoiceForm] = useState({
+  company_id: "",
+  project_id: "",
+  fecha_emision: "",
+  fecha_vencimiento: "",
+  concepto: "",
+  amount: "",
+  iva: "21",
+});
+
+
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
@@ -70,6 +88,20 @@ const [activeTab, setActiveTab] = useState<
           .single();
         
         if (worker) setWorkerName(worker.display_name);
+
+        const { data: companiesData, error: companiesError } = await supabase
+  .from("companies")
+  .select("id, company_name")
+  .order("company_name", { ascending: true });
+
+if (companiesError) {
+  console.error(
+    "[EmployeeArea] Error loading companies:",
+    companiesError
+  );
+} else {
+  setCompanies(companiesData || []);
+}
 
         // 2. Cargar Solicitudes de Auditoría (created_at ASC)
         const { data: audits } = await supabase
@@ -112,6 +144,47 @@ if (invs) setInvoices(invs);
 
     fetchData();
   }, [user]);
+  const handleGenerateInvoiceNumber = async () => {
+  setCreatingInvoice(true);
+  setInvoiceError("");
+
+  try {
+    const { data, error } = await supabase.rpc(
+      "generate_invoice_number"
+    );
+
+    if (error) {
+      console.error(
+        "[EmployeeArea] Error generating invoice number:",
+        error
+      );
+
+      setInvoiceError(error.message);
+      return;
+    }
+
+    if (!data) {
+      setInvoiceError(
+        "No se ha podido generar el número de factura."
+      );
+      return;
+    }
+
+    setGeneratedInvoiceNumber(data);
+
+  } catch (err) {
+    console.error(
+      "[EmployeeArea] Unexpected error generating invoice number:",
+      err
+    );
+
+    setInvoiceError(
+      "Ha ocurrido un error al generar el número de factura."
+    );
+  } finally {
+    setCreatingInvoice(false);
+  }
+};
 
   const handleLogout = async () => {
     await signOut();
@@ -255,14 +328,26 @@ if (invs) setInvoices(invs);
   <section className="space-y-6">
 
     <div className="flex items-center justify-between">
-      <h2 className="text-2xl font-bold text-[#1E3A8A]">
-        Facturas
-      </h2>
+  <h2 className="text-2xl font-bold text-[#1E3A8A]">
+    Facturas
+  </h2>
 
-      <Badge variant="outline" className="bg-white">
-        {filteredInvoices.length} facturas
-      </Badge>
-    </div>
+  <div className="flex items-center gap-3">
+
+    <Badge variant="outline" className="bg-white">
+      {filteredInvoices.length} facturas
+    </Badge>
+
+    <button
+      type="button"
+      onClick={() => setShowCreateInvoice(true)}
+      className="rounded-lg bg-[#1E3A8A] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#162D6B]"
+    >
+      + Crear factura
+    </button>
+
+  </div>
+</div>
 
     {/* Filtros */}
     <div className="flex flex-wrap gap-4">
@@ -275,11 +360,14 @@ if (invs) setInvoices(invs);
       >
         <option value="all">Todas las empresas</option>
 
-        {invoiceCompanies.map((company) => (
-          <option key={company.id} value={company.id}>
-            {company.company_name}
-          </option>
-        ))}
+        {companies.map((company) => (
+  <option
+    key={company.id}
+    value={company.id}
+  >
+    {company.company_name}
+  </option>
+))}
       </select>
 
       {/* Filtro proyecto */}
@@ -435,7 +523,370 @@ if (invs) setInvoices(invs);
 
   </section>
 </div>
+{/* Crear factura - Modal */}
+{showCreateInvoice && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
 
+    <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+
+      {/* Cabecera */}
+      <div className="flex items-center justify-between border-b px-6 py-5">
+
+        <div>
+          <h3 className="text-xl font-bold text-[#1E3A8A]">
+            Crear factura
+          </h3>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Introduce los datos de la nueva factura.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowCreateInvoice(false)}
+          className="text-2xl leading-none text-gray-400 hover:text-gray-700"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      {/* Contenido */}
+      <div className="max-h-[75vh] overflow-y-auto px-6 py-6">
+
+        <div className="space-y-6">
+
+          {/* Datos principales */}
+          <div>
+            <h4 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">
+              Datos de la factura
+            </h4>
+
+            <div className="mb-4 rounded-lg bg-blue-50 px-4 py-3">
+  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+    Nº de factura
+  </div>
+
+  <div
+  className={`mt-1 text-sm font-medium ${
+    generatedInvoiceNumber
+      ? "text-[#1E3A8A]"
+      : "text-gray-400"
+  }`}
+>
+  {generatedInvoiceNumber || "Se generará automáticamente"}
+</div>
+</div>
+{invoiceError && (
+  <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    {invoiceError}
+  </div>
+)}
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+              {/* Empresa */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Empresa
+                </label>
+
+                <select
+                  value={invoiceForm.company_id}
+                  onChange={(e) =>
+                    setInvoiceForm({
+                      ...invoiceForm,
+                      company_id: e.target.value,
+                      project_id: "",
+                    })
+                  }
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#1E3A8A]"
+                >
+                  <option value="">
+                    Seleccionar empresa
+                  </option>
+
+                  {invoiceCompanies.map((company) => (
+                    <option
+                      key={company.id}
+                      value={company.id}
+                    >
+                      {company.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+
+              {/* Proyecto */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Proyecto
+                </label>
+
+                <select
+                  value={invoiceForm.project_id}
+                  onChange={(e) =>
+                    setInvoiceForm({
+                      ...invoiceForm,
+                      project_id: e.target.value,
+                    })
+                  }
+                  disabled={!invoiceForm.company_id}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#1E3A8A] disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <option value="">
+                    {invoiceForm.company_id
+                      ? "Seleccionar proyecto"
+                      : "Selecciona primero una empresa"}
+                  </option>
+
+                  {invoiceProjects
+                    .filter(
+                      (project) =>
+                        project.company_id === invoiceForm.company_id
+                    )
+                    .map((project) => (
+                      <option
+                        key={project.id}
+                        value={project.id}
+                      >
+                        {project.nombre}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+            </div>
+          </div>
+
+
+          {/* Fechas */}
+          <div>
+            <h4 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">
+              Fechas
+            </h4>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Fecha de emisión
+                </label>
+
+                <input
+                  type="date"
+                  value={invoiceForm.fecha_emision}
+                  onChange={(e) =>
+                    setInvoiceForm({
+                      ...invoiceForm,
+                      fecha_emision: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#1E3A8A]"
+                />
+              </div>
+
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Fecha de vencimiento
+                </label>
+
+                <input
+                  type="date"
+                  value={invoiceForm.fecha_vencimiento}
+                  onChange={(e) =>
+                    setInvoiceForm({
+                      ...invoiceForm,
+                      fecha_vencimiento: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#1E3A8A]"
+                />
+              </div>
+
+            </div>
+          </div>
+
+
+          {/* Concepto */}
+          <div>
+            <h4 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">
+              Concepto
+            </h4>
+
+            <textarea
+              value={invoiceForm.concepto}
+              onChange={(e) =>
+                setInvoiceForm({
+                  ...invoiceForm,
+                  concepto: e.target.value,
+                })
+              }
+              rows={4}
+              placeholder="Describe el servicio o concepto de la factura..."
+              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#1E3A8A]"
+            />
+          </div>
+
+
+          {/* Datos económicos */}
+          <div>
+            <h4 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">
+              Datos económicos
+            </h4>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+              {/* Importe */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Base imponible (€)
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={invoiceForm.amount}
+                  onChange={(e) =>
+                    setInvoiceForm({
+                      ...invoiceForm,
+                      amount: e.target.value,
+                    })
+                  }
+                  placeholder="0,00"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#1E3A8A]"
+                />
+              </div>
+
+
+              {/* IVA */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  IVA
+                </label>
+
+                <select
+                  value={invoiceForm.iva}
+                  onChange={(e) =>
+                    setInvoiceForm({
+                      ...invoiceForm,
+                      iva: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#1E3A8A]"
+                >
+                  <option value="0">0 %</option>
+                  <option value="4">4 %</option>
+                  <option value="10">10 %</option>
+                  <option value="21">21 %</option>
+                </select>
+              </div>
+
+            </div>
+
+
+            {/* Total */}
+            <div className="mt-4 rounded-lg bg-gray-50 px-4 py-4">
+
+              <div className="flex items-center justify-between text-sm text-gray-600">
+                <span>Base imponible</span>
+
+                <span>
+                  {Number(invoiceForm.amount || 0).toLocaleString(
+                    "es-ES",
+                    {
+                      style: "currency",
+                      currency: "EUR",
+                    }
+                  )}
+                </span>
+              </div>
+
+
+              <div className="mt-2 flex items-center justify-between text-sm text-gray-600">
+                <span>
+                  IVA ({invoiceForm.iva}%)
+                </span>
+
+                <span>
+                  {(
+                    Number(invoiceForm.amount || 0) *
+                    (Number(invoiceForm.iva || 0) / 100)
+                  ).toLocaleString(
+                    "es-ES",
+                    {
+                      style: "currency",
+                      currency: "EUR",
+                    }
+                  )}
+                </span>
+              </div>
+
+
+              <div className="mt-3 flex items-center justify-between border-t pt-3">
+
+                <span className="font-bold text-gray-800">
+                  Total
+                </span>
+
+                <span className="text-xl font-bold text-[#1E3A8A]">
+                  {(
+                    Number(invoiceForm.amount || 0) *
+                    (1 + Number(invoiceForm.iva || 0) / 100)
+                  ).toLocaleString(
+                    "es-ES",
+                    {
+                      style: "currency",
+                      currency: "EUR",
+                    }
+                  )}
+                </span>
+
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* Botones */}
+      <div className="flex justify-end gap-3 border-t bg-gray-50 px-6 py-4">
+
+        <button
+          type="button"
+          onClick={() => setShowCreateInvoice(false)}
+          className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+        >
+          Cancelar
+        </button>
+
+        <button
+  type="button"
+  onClick={handleGenerateInvoiceNumber}
+  disabled={creatingInvoice}
+  className="rounded-lg bg-[#1E3A8A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#162D6B] disabled:cursor-not-allowed disabled:opacity-60"
+>
+  {creatingInvoice
+    ? "Generando..."
+    : generatedInvoiceNumber
+    ? "Generar otro número"
+    : "Crear factura"}
+</button>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
 {/* Tickets Section */}
 <div hidden={activeTab !== "tickets"}>
   <section className="space-y-6">

@@ -25,9 +25,7 @@ interface UserProfile {
   nombre: string;
   empresa: string | null;
   telefono: string | null;
-  rol: string;
   fecha_registro: string;
-  fecha_ultimo_login: string;
 }
 
 interface CompanyInfo {
@@ -86,6 +84,7 @@ export default function ClientArea() {
       }
 
       setProfile(data);
+      console.log("[ClientArea] Perfil cargado:", data);
       setEditForm({
         nombre: data.nombre || "",
         empresa: data.empresa || "",
@@ -93,16 +92,23 @@ export default function ClientArea() {
       });
 
       if (data.company_id) {
-        const { data: companyData } = await supabase
-          .from("companies")
-          .select("id, company_name, subscription_plan, subscription_status")
-          .eq("id", data.company_id)
-          .single();
-        
-        if (companyData) {
-          setCompany(companyData);
-        }
-      }
+  console.log("[ClientArea] company_id encontrado:", data.company_id);
+
+  const { data: companyData, error: companyError } = await supabase
+    .from("companies")
+    .select("id, company_name, subscription_plan, subscription_status")
+    .eq("id", data.company_id)
+    .single();
+
+  console.log("[ClientArea] Empresa obtenida:", companyData);
+  console.log("[ClientArea] Error empresa:", companyError);
+
+  if (companyError) {
+    console.error("[ClientArea] No se pudo cargar la empresa:", companyError);
+  } else if (companyData) {
+    setCompany(companyData);
+  }
+}
 
       setError(null);
     } catch (err: any) {
@@ -183,9 +189,9 @@ export default function ClientArea() {
             <p className="text-[#52627A]">Información personal y configuración de tu cuenta</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div>
             {/* Profile Information */}
-            <div className="md:col-span-2">
+            <div>
               <Card className="p-8 border border-[#E8ECF2] bg-white">
                 {profile ? (
                   <div className="space-y-8">
@@ -210,48 +216,34 @@ export default function ClientArea() {
                     <div className="border-t border-[#E8ECF2]"></div>
 
                     {/* Row 2 */}
-                    <div className="grid md:grid-cols-2 gap-8">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Building2 className="h-4 w-4 text-[#173B8F]" />
-                          <label className="text-sm font-semibold text-[#52627A]">Empresa</label>
-                        </div>
-                        <p className="text-lg font-semibold text-[#182230]">{profile.empresa || "No especificada"}</p>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Shield className="h-4 w-4 text-[#173B8F]" />
-                          <label className="text-sm font-semibold text-[#52627A]">Rol</label>
-                        </div>
-                        <Badge className="bg-[#173B8F]/10 text-[#173B8F] border-[#173B8F]/20">
-                          {profile.rol === "admin" ? "Administrador" : "Usuario Cliente"}
-                        </Badge>
-                      </div>
-                    </div>
+<div className="grid md:grid-cols-2 gap-8">
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Building2 className="h-4 w-4 text-[#173B8F]" />
+      <label className="text-sm font-semibold text-[#52627A]">
+        Empresa
+      </label>
+    </div>
+    <p className="text-lg font-semibold text-[#182230]">
+      {company?.company_name || profile.empresa || "No especificada"}
+    </p>
+  </div>
 
-                    <div className="border-t border-[#E8ECF2]"></div>
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <Calendar className="h-4 w-4 text-[#173B8F]" />
+      <label className="text-sm font-semibold text-[#52627A]">
+        Fecha de Registro
+      </label>
+    </div>
+    <p className="text-lg font-semibold text-[#182230]">
+      {profile.fecha_registro
+        ? new Date(profile.fecha_registro).toLocaleDateString("es-ES")
+        : "-"}
+    </p>
+  </div>
+</div>
 
-                    {/* Row 3 */}
-                    <div className="grid md:grid-cols-2 gap-8">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Calendar className="h-4 w-4 text-[#173B8F]" />
-                          <label className="text-sm font-semibold text-[#52627A]">Fecha de Registro</label>
-                        </div>
-                        <p className="text-lg font-semibold text-[#182230]">
-                          {profile.fecha_registro ? new Date(profile.fecha_registro).toLocaleDateString("es-ES") : "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Calendar className="h-4 w-4 text-[#173B8F]" />
-                          <label className="text-sm font-semibold text-[#52627A]">Último Acceso</label>
-                        </div>
-                        <p className="text-lg font-semibold text-[#182230]">
-                          {profile.fecha_ultimo_login ? new Date(profile.fecha_ultimo_login).toLocaleDateString("es-ES") : "-"}
-                        </p>
-                      </div>
-                    </div>
 
                     <div className="border-t border-[#E8ECF2]"></div>
 
@@ -298,37 +290,9 @@ export default function ClientArea() {
                 )}
               </Card>
             </div>
-
-            {/* Account Status */}
-            <div>
-              <Card className="p-8 border border-[#E8ECF2] bg-[#F4F6F9]">
-                <h3 className="text-lg font-bold text-[#102A66] mb-6 flex items-center gap-2">
-                  <Info className="h-5 w-5" />
-                  Estado de la Cuenta
-                </h3>
-                <div className="space-y-6">
-                  <div>
-                    <label className="text-xs font-semibold text-[#52627A] uppercase mb-2 block">Empresa Asociada</label>
-                    <p className="text-sm font-bold text-[#182230]">{company?.company_name || profile?.empresa || "Sin empresa"}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-[#52627A] uppercase mb-2 block">Plan</label>
-                    <Badge className="bg-[#173B8F]/10 text-[#173B8F] border-[#173B8F]/20 text-xs">
-                      {company?.subscription_plan || "Plan Demo"}
-                    </Badge>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-[#52627A] uppercase mb-2 block">Estado</label>
-                    <div className="flex items-center gap-2">
-                      <div className={`h-3 w-3 rounded-full ${company?.subscription_status === 'active' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                      <span className="text-sm font-medium text-[#182230] capitalize">{company?.subscription_status || "Activa"}</span>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </div>
           </div>
         </section>
+            
 
         {/* Mis Proyectos Section */}
         <section className="mb-20 py-16 bg-[#F4F6F9] -mx-4 px-4">

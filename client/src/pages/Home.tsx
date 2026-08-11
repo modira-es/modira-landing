@@ -517,19 +517,24 @@ export default function Home() {
               },
             ].map((service, idx) => (
               <Card
-                key={idx}
-                className={`p-8 border-2 transition-all ${
-                  service.featured
-                    ? "border-[#173B8F] bg-gradient-to-br from-white to-[#F4F6F9] shadow-xl"
-                    : "border-[#E8ECF2] hover:border-[#173B8F]"
-                }`}
-              >
+  key={idx}
+  className={`relative overflow-hidden p-8 border-2 transition-all ${
+    service.featured
+      ? "border-[#173B8F] bg-gradient-to-br from-white to-[#F4F6F9] shadow-xl"
+      : "border-[#E8ECF2] hover:border-[#173B8F]"
+  }`}
+>
+  {service.featured && (
+    <div className="absolute top-6 -right-12 w-44 rotate-45 bg-[#173B8F] py-2 text-center text-xs font-bold text-white shadow-md">
+      Más popular
+    </div>
+  )}
                 <h3 className="text-2xl font-bold text-[#102A66] mb-2">
                   {service.title}
                 </h3>
-                <p className="text-3xl font-bold text-[#173B8F] mb-4">
-                  {service.price}
-                </p>
+                <p className="text-3xl font-bold italic text-[#102A66] mb-4">
+  {service.price}
+</p>
                 <p className="text-[#52627A] mb-6">{service.description}</p>
                 <div className="space-y-3 mb-6">
                   {service.features.map((feature, i) => (
@@ -600,19 +605,24 @@ export default function Home() {
               },
             ].map((plan, idx) => (
               <Card
-                key={idx}
-                className={`p-8 border-2 ${
-                  plan.featured
-                    ? "border-[#173B8F] bg-gradient-to-br from-white to-[#F4F6F9]"
-                    : "border-[#E8ECF2]"
-                }`}
-              >
+  key={idx}
+  className={`relative overflow-hidden p-8 border-2 ${
+    plan.featured
+      ? "border-[#173B8F] bg-gradient-to-br from-white to-[#F4F6F9] shadow-xl"
+      : "border-[#E8ECF2]"
+  }`}
+>
+  {plan.featured && (
+    <div className="absolute top-6 -right-12 w-44 rotate-45 bg-[#173B8F] py-2 text-center text-xs font-bold text-white shadow-md">
+      Más popular
+    </div>
+  )}
                 <h3 className="text-2xl font-bold text-[#102A66] mb-2">
                   {plan.name}
                 </h3>
-                <p className="text-3xl font-bold text-[#173B8F] mb-2">
-                  {plan.price}
-                </p>
+                <p className="text-3xl font-bold italic text-[#102A66] mb-2">
+  {plan.price}
+</p>
                 <p className="text-sm text-[#52627A] mb-2">{plan.automatizaciones}</p>
                 {plan.description && <p className="text-sm text-[#52627A] mb-6">{plan.description}</p>}
                 <ul className="space-y-3 mb-6">
@@ -695,6 +705,61 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Por qué elegir Modira Section */}
+      <section className="py-16 md:py-24 bg-white">
+        <div className="container mx-auto px-4">
+          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
+            Por qué elegir Modira
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              {[
+                {
+                  title: "100% personalizadas",
+                  description: "Cada solución se adapta a tu negocio específico, no usamos templates genéricos.",
+                },
+                {
+                  title: "Soporte cercano",
+                  description: "Equipo dedicado que entiende tu negocio y está disponible cuando lo necesitas.",
+                },
+                {
+                  title: "Formación incluida",
+                  description: "Tu equipo aprende a mantener y mejorar los sistemas sin depender de nosotros.",
+                },
+                {
+                  title: "Orientados a resultados",
+                  description: "No vendemos horas, vendemos resultados medibles y mejoras en tu negocio.",
+                },
+              ].map((item, idx) => (
+                <div key={idx} className="flex gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-[#173B8F]/10">
+                      <CheckCircle2 className="h-6 w-6 text-[#173B8F]" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#102A66] mb-2">
+                      {item.title}
+                    </h3>
+                    <p className="text-[#52627A]">{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="relative">
+              <img
+                src="/Images/team-collaboration_a30b2170.png"
+                alt="Colaboración del equipo"
+                className="rounded-2xl shadow-lg w-full h-auto"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+
 
       {/* FAQ Section */}
       <section id="faq" className="py-16 md:py-24 bg-[#F4F6F9]">
@@ -867,58 +932,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Por qué elegir Modira Section */}
-      <section className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
-            Por qué elegir Modira
-          </h2>
-
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              {[
-                {
-                  title: "100% personalizadas",
-                  description: "Cada solución se adapta a tu negocio específico, no usamos templates genéricos.",
-                },
-                {
-                  title: "Soporte cercano",
-                  description: "Equipo dedicado que entiende tu negocio y está disponible cuando lo necesitas.",
-                },
-                {
-                  title: "Formación incluida",
-                  description: "Tu equipo aprende a mantener y mejorar los sistemas sin depender de nosotros.",
-                },
-                {
-                  title: "Orientados a resultados",
-                  description: "No vendemos horas, vendemos resultados medibles y mejoras en tu negocio.",
-                },
-              ].map((item, idx) => (
-                <div key={idx} className="flex gap-4">
-                  <div className="flex-shrink-0">
-                    <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-[#173B8F]/10">
-                      <CheckCircle2 className="h-6 w-6 text-[#173B8F]" />
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-[#102A66] mb-2">
-                      {item.title}
-                    </h3>
-                    <p className="text-[#52627A]">{item.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="relative">
-              <img
-                src="/Images/team-collaboration_a30b2170.png"
-                alt="Colaboración del equipo"
-                className="rounded-2xl shadow-lg w-full h-auto"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+      
 
       {/* Footer */}
       <footer className="bg-[#102A66] text-white py-12">

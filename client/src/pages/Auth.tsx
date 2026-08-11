@@ -88,6 +88,15 @@ export default function Auth() {
     setLoading(true);
 
     try {
+
+console.log("[REGISTER] Datos enviados:", {
+  email: registerForm.email,
+  nombre: registerForm.nombre,
+  empresa: registerForm.empresa,
+});
+
+
+
       const result = await signUp(
         registerForm.email,
         registerForm.password,

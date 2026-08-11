@@ -2,7 +2,7 @@ BEGIN;
 
 -- ============================================================
 -- MODIRA - MIGRACIÓN 018
--- IDENTIFICADOR ÚNICO ALEATORIO PARA FACTURAS
+-- IDENTIFICADOR ÚNICO ALEATORIO DE FACTURAS
 -- ============================================================
 --
 -- OBJETIVO:
@@ -14,15 +14,20 @@ BEGIN;
 --
 -- MODIRA-26-K7P4X9
 --
--- Donde:
+-- El identificador:
 --
--- MODIRA  → identificador de la plataforma
--- 26      → año de creación de la factura
--- K7P4X9  → identificador aleatorio
+-- - No muestra cuántas facturas existen.
+-- - No depende de un contador visible.
+-- - Es único en toda MODIRA.
+-- - Puede utilizarse como nombre del PDF.
 --
--- El identificador NO revela cuántas facturas existen.
+-- EJEMPLO:
 --
--- El trabajador NO introduce manualmente el número.
+-- numero_factura
+--     MODIRA-26-K7P4X9
+--
+-- PDF
+--     MODIRA-26-K7P4X9.pdf
 --
 -- ============================================================
 
@@ -34,19 +39,21 @@ BEGIN;
 DO $$
 BEGIN
 
-    -- Comprobar que existe la tabla invoices
+    -- Comprobar que existe invoices
     IF NOT EXISTS (
         SELECT 1
         FROM information_schema.tables
         WHERE table_schema = 'public'
           AND table_name = 'invoices'
     ) THEN
+
         RAISE EXCEPTION
         'Migration 018 stopped: public.invoices does not exist';
+
     END IF;
 
 
-    -- Comprobar que existe numero_factura
+    -- Comprobar numero_factura
     IF NOT EXISTS (
         SELECT 1
         FROM information_schema.columns
@@ -54,24 +61,72 @@ BEGIN
           AND table_name = 'invoices'
           AND column_name = 'numero_factura'
     ) THEN
+
         RAISE EXCEPTION
         'Migration 018 stopped: invoices.numero_factura does not exist';
+
+    END IF;
+
+
+    -- Comprobar current_user_is_worker()
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_proc
+        WHERE pronamespace = 'public'::regnamespace
+          AND proname = 'current_user_is_worker'
+    ) THEN
+
+        RAISE EXCEPTION
+        'Migration 018 stopped: current_user_is_worker() does not exist';
+
     END IF;
 
 END $$;
 
 
 -- ============================================================
--- 2. ELIMINAR LA RESTRICCIÓN ANTERIOR
+-- 2. COMPROBAR DUPLICADOS EXISTENTES
 -- ============================================================
 --
--- La migración inicial permite que el mismo número de factura
--- exista en empresas diferentes:
+-- Antes de crear la restricción UNIQUE comprobamos que no
+-- existan números de factura duplicados.
 --
--- UNIQUE (company_id, numero_factura)
+-- ============================================================
+
+DO $$
+BEGIN
+
+    IF EXISTS (
+        SELECT numero_factura
+        FROM public.invoices
+        WHERE numero_factura IS NOT NULL
+        GROUP BY numero_factura
+        HAVING COUNT(*) > 1
+    ) THEN
+
+        RAISE EXCEPTION
+        'Migration 018 stopped: duplicate numero_factura values already exist';
+
+    END IF;
+
+END $$;
+
+
+-- ============================================================
+-- 3. ELIMINAR LA RESTRICCIÓN ANTERIOR
+-- ============================================================
 --
--- Ahora queremos que el identificador sea único en TODA
--- MODIRA, independientemente de la empresa.
+-- La migración inicial utilizaba una unicidad basada en:
+--
+-- company_id + numero_factura
+--
+-- Esto permitiría:
+--
+-- Empresa A → MODIRA-26-K7P4X9
+-- Empresa B → MODIRA-26-K7P4X9
+--
+-- Nosotros queremos que el identificador sea único en toda
+-- MODIRA.
 --
 -- ============================================================
 
@@ -80,43 +135,40 @@ DROP CONSTRAINT IF EXISTS invoices_company_id_numero_factura_key;
 
 
 -- ============================================================
--- 3. CREAR UNICIDAD GLOBAL
+-- 4. CREAR UNICIDAD GLOBAL
 -- ============================================================
 --
--- De esta forma nunca podrán existir dos facturas con:
---
--- MODIRA-26-K7P4X9
---
--- aunque pertenezcan a empresas diferentes.
+-- Nunca podrán existir dos facturas con el mismo
+-- numero_factura.
 --
 -- ============================================================
 
 CREATE UNIQUE INDEX IF NOT EXISTS
 idx_invoices_numero_factura_unique
-ON public.invoices (numero_factura);
+ON public.invoices (numero_factura)
+WHERE numero_factura IS NOT NULL;
 
 
 -- ============================================================
--- 4. FUNCIÓN PARA GENERAR EL IDENTIFICADOR
+-- 5. FUNCIÓN PARA GENERAR EL IDENTIFICADOR
 -- ============================================================
 --
--- Genera:
+-- Genera identificadores como:
 --
 -- MODIRA-26-K7P4X9
+-- MODIRA-26-H3M8QW
+-- MODIRA-26-R7T2KA
 --
--- utilizando:
+-- Se utilizan 32 caracteres:
 --
--- - Año actual
--- - 6 caracteres aleatorios
+-- ABCDEFGHJKLMNPQRSTUVWXYZ23456789
 --
--- Caracteres utilizados:
+-- Se excluyen:
 --
--- ABCDEFGHJKLMNPQRSTUVWXYZ
--- 23456789
---
--- Se excluyen caracteres como:
---
--- I, O, 0, 1
+-- I
+-- O
+-- 0
+-- 1
 --
 -- para evitar confusiones visuales.
 --
@@ -137,34 +189,31 @@ DECLARE
 BEGIN
 
     -- ========================================================
-    -- 1. COMPROBAR QUE EL USUARIO ES UN TRABAJADOR ACTIVO
+    -- 1. COMPROBAR TRABAJADOR ACTIVO
     -- ========================================================
 
     IF NOT public.current_user_is_worker() THEN
+
         RAISE EXCEPTION
         'Acceso denegado: se requiere un trabajador activo';
+
     END IF;
 
 
     -- ========================================================
-    -- 2. OBTENER LOS DOS ÚLTIMOS DÍGITOS DEL AÑO
+    -- 2. OBTENER AÑO ACTUAL
     -- ========================================================
 
     v_year := TO_CHAR(CURRENT_DATE, 'YY');
 
 
     -- ========================================================
-    -- 3. GENERAR 6 CARACTERES ALEATORIOS
+    -- 3. GENERAR CÓDIGO ALEATORIO
     -- ========================================================
     --
-    -- Utilizamos 32 caracteres posibles:
+    -- 32 posibilidades por posición.
     --
-    -- ABCDEFGHJKLMNPQRSTUVWXYZ23456789
-    --
-    -- 32^6 = 1.073.741.824 combinaciones posibles.
-    --
-    -- La probabilidad de coincidencia es extremadamente baja,
-    -- y además la base de datos impone UNIQUE.
+    -- 32^6 = 1.073.741.824 combinaciones.
     --
     -- ========================================================
 
@@ -192,7 +241,44 @@ BEGIN
 
 
     -- ========================================================
-    -- 5. DEVOLVER IDENTIFICADOR
+    -- 5. COMPROBAR QUE NO EXISTA
+    -- ========================================================
+    --
+    -- Si por una probabilidad extremadamente pequeña el código
+    -- ya existiera, generamos otro.
+    --
+    -- ========================================================
+
+    WHILE EXISTS (
+        SELECT 1
+        FROM public.invoices
+        WHERE numero_factura = v_invoice_number
+    )
+    LOOP
+
+        SELECT string_agg(
+            substr(
+                'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+                floor(random() * 32 + 1)::integer,
+                1
+            ),
+            ''
+        )
+        INTO v_random
+        FROM generate_series(1, 6);
+
+
+        v_invoice_number :=
+            'MODIRA-'
+            || v_year
+            || '-'
+            || v_random;
+
+    END LOOP;
+
+
+    -- ========================================================
+    -- 6. DEVOLVER IDENTIFICADOR
     -- ========================================================
 
     RETURN v_invoice_number;
@@ -202,12 +288,12 @@ $$;
 
 
 -- ============================================================
--- 5. PERMISOS DE EJECUCIÓN
+-- 6. CONTROLAR QUIÉN PUEDE EJECUTAR LA FUNCIÓN
 -- ============================================================
 --
--- Nadie puede ejecutar la función de forma anónima.
+-- La función no puede ejecutarse de forma anónima.
 --
--- Los usuarios autenticados podrán ejecutarla, pero la propia
+-- Los usuarios autenticados pueden llamarla, pero la propia
 -- función comprueba que sean trabajadores activos.
 --
 -- ============================================================
@@ -216,13 +302,14 @@ REVOKE ALL
 ON FUNCTION public.generate_invoice_number()
 FROM PUBLIC;
 
+
 GRANT EXECUTE
 ON FUNCTION public.generate_invoice_number()
 TO authenticated;
 
 
 -- ============================================================
--- 6. VERIFICACIÓN FINAL
+-- 7. VERIFICACIÓN FINAL
 -- ============================================================
 
 DO $$
@@ -260,22 +347,3 @@ END $$;
 
 
 COMMIT;
-
-
--- ============================================================
--- RESULTADO
--- ============================================================
---
--- Ejemplos:
---
--- MODIRA-26-K7P4X9
--- MODIRA-26-H3M8QW
--- MODIRA-26-R7T2KA
---
--- No se puede saber cuántas facturas existen.
---
--- Cada identificador es único en toda la plataforma.
---
--- El mismo identificador no puede pertenecer a dos empresas.
---
--- ============================================================
