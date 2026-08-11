@@ -78,12 +78,18 @@ export default function EmployeeProjects() {
     try {
       setUpdatingId(projectId);
 
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({ estado: newStatus })
-        .eq("id", projectId);
+      const { data: updatedProject, error: updateError } =
+  await supabase.rpc("update_project_by_worker", {
+    p_project_id: projectId,
+    p_nombre: null,
+    p_estado: newStatus,
+  });
 
-      if (updateError) throw updateError;
+if (updateError) throw updateError;
+
+if (!updatedProject) {
+  throw new Error("No se pudo actualizar el proyecto");
+}
 
       // Update local state
       setProjects(
@@ -110,12 +116,18 @@ export default function EmployeeProjects() {
     try {
       setUpdatingId(projectId);
 
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({ nombre: tempTitle.trim() })
-        .eq("id", projectId);
+      const { data: updatedProject, error: updateError } =
+  await supabase.rpc("update_project_by_worker", {
+    p_project_id: projectId,
+    p_nombre: tempTitle.trim(),
+    p_estado: null,
+  });
 
-      if (updateError) throw updateError;
+if (updateError) throw updateError;
+
+if (!updatedProject) {
+  throw new Error("No se pudo actualizar el proyecto");
+}
 
       // Update local state
       setProjects(

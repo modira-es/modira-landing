@@ -83,6 +83,20 @@ export default function ProjectsList() {
     try {
       setIsCreating(true);
 
+
+
+
+const { data: debugCompanyId, error: debugCompanyError } =
+  await supabase.rpc("current_user_company_id");
+
+console.log("DEBUG usuario:", user.id);
+console.log("DEBUG company_id:", debugCompanyId);
+console.log("DEBUG error company:", debugCompanyError);
+
+
+
+
+
       const { error: insertError } = await supabase
         .rpc("create_project", {
           p_descripcion: createForm.descripcion.trim(),
