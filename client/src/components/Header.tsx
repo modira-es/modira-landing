@@ -26,13 +26,13 @@ export default function Header() {
 
   return (
     <header
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+  className={`fixed top-0 left-0 w-full h-[80px] z-50 transition-all duration-300 ${
         isScrolled
           ? "bg-[#102A66]/95 backdrop-blur-md shadow-lg border-b border-[#173B8F]/20"
           : "bg-[#102A66]/90 backdrop-blur-sm border-b border-[#173B8F]/10"
       }`}
     >
-      <nav className="container mx-auto px-4 py-4 flex items-center justify-between">
+      <nav className="container mx-auto h-[80px] pl-10 pr-4 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-2">
           {import.meta.env.VITE_APP_LOGO && !import.meta.env.VITE_APP_LOGO.startsWith('%') ? (

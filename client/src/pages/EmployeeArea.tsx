@@ -17,18 +17,9 @@ export default function EmployeeArea() {
   const [auditRequests, setAuditRequests] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [invoiceCompanyFilter, setInvoiceCompanyFilter] = useState("all");
 const [invoiceProjectFilter, setInvoiceProjectFilter] = useState("all");
-const invoiceCompanies = Array.from(
-  new Map(
-    invoices
-      .filter((inv) => inv.companies)
-      .map((inv) => [
-        inv.companies.id,
-        inv.companies
-      ])
-  ).values()
-);
 const filteredInvoices = invoices.filter((inv) => {
   const companyMatch =
     invoiceCompanyFilter === "all" ||
@@ -40,15 +31,13 @@ const filteredInvoices = invoices.filter((inv) => {
 
   return companyMatch && projectMatch;
 });
-const invoiceProjects = Array.from(
-  new Map(
-    invoices
-      .filter((inv) => inv.projects)
-      .map((inv) => [
-        inv.projects.id,
-        inv.projects
-      ])
-  ).values()
+
+// Los trabajadores pueden consultar todas las facturas mediante RLS.
+// Las relaciones de companies/projects se resuelven desde los datos
+// que ya cargamos por separado, evitando que una relación RLS bloquee
+// la consulta completa de invoices.
+const invoiceProjects = projects.filter((project) =>
+  invoices.some((inv) => inv.project_id === project.id)
 );
 
 const [tickets, setTickets] = useState<any[]>([]);
@@ -75,116 +64,209 @@ const [invoiceForm, setInvoiceForm] = useState({
 });
 
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
+  const loadData = async () => {
+    if (!user) return;
 
-      try {
-        // 1. Obtener nombre del trabajador
-        const { data: worker } = await supabase
-          .from("workers")
-          .select("display_name")
-          .eq("auth_user_id", user.id)
-          .single();
-        
-        if (worker) setWorkerName(worker.display_name);
+    try {
+      // ============================================================
+      // 1. DATOS DEL TRABAJADOR
+      // ============================================================
+      const { data: worker, error: workerError } = await supabase
+        .from("workers")
+        .select("display_name")
+        .eq("auth_user_id", user.id)
+        .single();
 
-        const { data: companiesData, error: companiesError } = await supabase
-  .from("companies")
-  .select("id, company_name")
-  .order("company_name", { ascending: true });
-
-if (companiesError) {
-  console.error(
-    "[EmployeeArea] Error loading companies:",
-    companiesError
-  );
-} else {
-  setCompanies(companiesData || []);
-}
-
-        // 2. Cargar Solicitudes de Auditoría (created_at ASC)
-        const { data: audits } = await supabase
-          .from("audit_requests")
-          .select("*")
-          .order("created_at", { ascending: true });
-        
-        if (audits) setAuditRequests(audits);
-
-        // 3. Cargar Facturas (created_at ASC)
-const { data: invs } = await supabase
-  .from("invoices")
-  .select(`
-    *,
-    profiles:user_id (nombre, email),
-    companies:company_id (id, company_name),
-    projects:project_id (id, nombre)
-  `)
-  .order("created_at", { ascending: true });
-
-if (invs) setInvoices(invs);
-
-        // 4. Cargar Tickets (created_at ASC)
-        const { data: tks } = await supabase
-          .from("support_tickets")
-          .select(`
-            *,
-            profiles:user_id (nombre, email)
-          `)
-          .order("created_at", { ascending: true });
-        
-        if (tks) setTickets(tks);
-
-      } catch (err) {
-        console.error("[EmployeeArea] Error fetching data:", err);
-      } finally {
-        setLoading(false);
+      if (workerError) {
+        console.error("[EmployeeArea] Error loading worker:", workerError);
+      } else if (worker) {
+        setWorkerName(worker.display_name || "Trabajador");
       }
-    };
 
-    fetchData();
+      // ============================================================
+      // 2. EMPRESAS Y PROYECTOS
+      // ============================================================
+      const { data: companiesData, error: companiesError } = await supabase
+        .from("companies")
+        .select("id, company_name")
+        .order("company_name", { ascending: true });
+
+      if (companiesError) {
+        console.error("[EmployeeArea] Error loading companies:", companiesError);
+      } else {
+        setCompanies(companiesData || []);
+      }
+
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select("id, nombre, company_id")
+        .order("nombre", { ascending: true });
+
+      if (projectsError) {
+        console.error("[EmployeeArea] Error loading projects:", projectsError);
+      } else {
+        setProjects(projectsData || []);
+      }
+
+      // ============================================================
+      // 3. AUDITORÍAS
+      // ============================================================
+      const { data: audits, error: auditsError } = await supabase
+        .from("audit_requests")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (auditsError) {
+        console.error("[EmployeeArea] Error loading audits:", auditsError);
+      } else {
+        setAuditRequests(audits || []);
+      }
+
+      // ============================================================
+      // 4. FACTURAS
+      // ============================================================
+      // IMPORTANTE: no hacemos joins con profiles/companies/projects aquí.
+      // El worker tiene SELECT sobre invoices y las relaciones pueden estar
+      // condicionadas por sus propias políticas RLS. Cargamos la factura
+      // directamente y resolvemos empresa/proyecto en el frontend.
+      const { data: invs, error: invoicesError } = await supabase
+        .from("invoices")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (invoicesError) {
+        console.error("[EmployeeArea] Error loading invoices:", invoicesError);
+      } else {
+        setInvoices(invs || []);
+      }
+
+      // ============================================================
+      // 5. TICKETS
+      // ============================================================
+      const { data: tks, error: ticketsError } = await supabase
+        .from("support_tickets")
+        .select(`
+          *,
+          profiles:user_id (nombre, email)
+        `)
+        .order("created_at", { ascending: true });
+
+      if (ticketsError) {
+        console.error("[EmployeeArea] Error loading tickets:", ticketsError);
+      } else {
+        setTickets(tks || []);
+      }
+    } catch (err) {
+      console.error("[EmployeeArea] Error fetching data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
   }, [user]);
-  const handleGenerateInvoiceNumber = async () => {
-  setCreatingInvoice(true);
-  setInvoiceError("");
 
-  try {
-    const { data, error } = await supabase.rpc(
-      "generate_invoice_number"
-    );
+  const handleCreateInvoice = async () => {
+    setInvoiceError("");
 
-    if (error) {
-      console.error(
-        "[EmployeeArea] Error generating invoice number:",
-        error
-      );
-
-      setInvoiceError(error.message);
+    // ============================================================
+    // 1. VALIDACIONES DEL FORMULARIO
+    // ============================================================
+    if (!invoiceForm.company_id) {
+      setInvoiceError("Selecciona una empresa.");
       return;
     }
 
-    if (!data) {
-      setInvoiceError(
-        "No se ha podido generar el número de factura."
-      );
+    if (!invoiceForm.project_id) {
+      setInvoiceError("Selecciona un proyecto.");
       return;
     }
 
-    setGeneratedInvoiceNumber(data);
+    const subtotal = Number(invoiceForm.amount || 0);
+    const ivaPorcentaje = Number(invoiceForm.iva || 0);
 
-  } catch (err) {
-    console.error(
-      "[EmployeeArea] Unexpected error generating invoice number:",
-      err
-    );
+    if (!Number.isFinite(subtotal) || subtotal < 0) {
+      setInvoiceError("Introduce un importe válido mayor o igual que 0.");
+      return;
+    }
 
-    setInvoiceError(
-      "Ha ocurrido un error al generar el número de factura."
-    );
-  } finally {
-    setCreatingInvoice(false);
-  }
-};
+    if (!Number.isFinite(ivaPorcentaje) || ivaPorcentaje < 0) {
+      setInvoiceError("El porcentaje de IVA no es válido.");
+      return;
+    }
+
+    // ============================================================
+    // 2. CREACIÓN CONTROLADA MEDIANTE RPC
+    //
+    // El trabajador NO hace INSERT directo sobre invoices.
+    // La RPC valida trabajador, empresa y proyecto, genera el
+    // numero_factura y crea la factura de forma atómica.
+    // ============================================================
+    setCreatingInvoice(true);
+
+    try {
+      const { data, error } = await supabase.rpc("create_invoice_by_worker", {
+        p_company_id: invoiceForm.company_id,
+        p_project_id: invoiceForm.project_id,
+        p_fecha_emision: invoiceForm.fecha_emision
+          ? new Date(`${invoiceForm.fecha_emision}T00:00:00`).toISOString()
+          : null,
+        p_fecha_vencimiento: invoiceForm.fecha_vencimiento
+          ? new Date(`${invoiceForm.fecha_vencimiento}T00:00:00`).toISOString()
+          : null,
+        p_descripcion: invoiceForm.concepto.trim() || null,
+        p_subtotal: subtotal,
+        p_iva_porcentaje: ivaPorcentaje,
+      });
+
+      if (error) {
+        console.error("[EmployeeArea] Error creating invoice:", error);
+        setInvoiceError(error.message || "No se pudo crear la factura.");
+        return;
+      }
+
+      if (!data) {
+        setInvoiceError("La factura no se ha creado correctamente.");
+        return;
+      }
+
+      const createdInvoice = Array.isArray(data) ? data[0] : data;
+      const invoiceNumber = createdInvoice?.numero_factura;
+
+      if (!invoiceNumber) {
+        console.error("[EmployeeArea] RPC returned an invalid invoice:", data);
+        setInvoiceError("La factura se creó, pero no se recibió su número.");
+        return;
+      }
+
+      setGeneratedInvoiceNumber(invoiceNumber);
+
+      // Actualizar la tabla inmediatamente.
+      await loadData();
+
+      alert(`Factura ${invoiceNumber} creada correctamente.`);
+
+      // Cerrar y limpiar el formulario después de crearla.
+      setShowCreateInvoice(false);
+      setInvoiceForm({
+        company_id: "",
+        project_id: "",
+        fecha_emision: "",
+        fecha_vencimiento: "",
+        concepto: "",
+        amount: "",
+        iva: "21",
+      });
+      setInvoiceError("");
+      setGeneratedInvoiceNumber("");
+    } catch (error) {
+      console.error("[EmployeeArea] Unexpected error creating invoice:", error);
+      setInvoiceError("Ha ocurrido un error al crear la factura.");
+    } finally {
+      setCreatingInvoice(false);
+    }
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -203,11 +285,11 @@ if (invs) setInvoices(invs);
     <div className="min-h-screen bg-[#F5F7FA]">
       <EmployeeAreaHeader userName={workerName || "Trabajador"} onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-4 pt-28 pb-12">
 
   {/* Navegación del Área de Empleados */}
   <div className="mb-10 border-b border-gray-200">
-    <div className="flex gap-8 overflow-x-auto">
+    <div className="flex items-center gap-8 overflow-x-auto">
 
       <button
         type="button"
@@ -340,7 +422,20 @@ if (invs) setInvoices(invs);
 
     <button
       type="button"
-      onClick={() => setShowCreateInvoice(true)}
+      onClick={() => {
+        setInvoiceError("");
+        setGeneratedInvoiceNumber("");
+        setInvoiceForm({
+          company_id: "",
+          project_id: "",
+          fecha_emision: "",
+          fecha_vencimiento: "",
+          concepto: "",
+          amount: "",
+          iva: "21",
+        });
+        setShowCreateInvoice(true);
+      }}
       className="rounded-lg bg-[#1E3A8A] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#162D6B]"
     >
       + Crear factura
@@ -448,27 +543,28 @@ if (invs) setInvoices(invs);
                   {/* Cliente */}
                   <TableCell>
                     <div className="font-medium">
-                      {inv.profiles?.nombre || "N/A"}
+                      Cliente
                     </div>
-
                     <div className="text-xs text-gray-500">
-                      {inv.profiles?.email || ""}
+                      {inv.user_id || "Sin usuario"}
                     </div>
                   </TableCell>
 
                   {/* Empresa */}
                   <TableCell>
-                    {inv.companies?.company_name || "Sin empresa"}
+                    {companies.find((company) => company.id === inv.company_id)?.company_name ||
+                      "Sin empresa"}
                   </TableCell>
 
                   {/* Proyecto */}
                   <TableCell>
-                    {inv.projects?.nombre || "Sin proyecto"}
+                    {projects.find((project) => project.id === inv.project_id)?.nombre ||
+                      "Sin proyecto"}
                   </TableCell>
 
                   {/* Nº Factura */}
                   <TableCell className="font-mono text-sm">
-                    {inv.invoice_number}
+                    {inv.numero_factura}
                   </TableCell>
 
                   {/* Importe */}
@@ -476,25 +572,25 @@ if (invs) setInvoices(invs);
                     {new Intl.NumberFormat("es-ES", {
                       style: "currency",
                       currency: "EUR",
-                    }).format(inv.amount)}
+                    }).format(Number(inv.monto || 0))}
                   </TableCell>
 
                   {/* Estado */}
                   <TableCell className="text-center">
                     <Badge
                       className={
-                        inv.status === "paid"
+                        inv.estado === "pagada"
                           ? "bg-green-100 text-green-800 hover:bg-green-100"
-                          : inv.status === "pending"
+                          : inv.estado === "pendiente"
                           ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
                           : "bg-gray-100 text-gray-800 hover:bg-gray-100"
                       }
                     >
-                      {inv.status === "paid"
+                      {inv.estado === "pagada"
                         ? "Pagada"
-                        : inv.status === "pending"
+                        : inv.estado === "pendiente"
                         ? "Pendiente"
-                        : inv.status}
+                        : inv.estado}
                     </Badge>
                   </TableCell>
 
@@ -608,7 +704,7 @@ if (invs) setInvoices(invs);
                     Seleccionar empresa
                   </option>
 
-                  {invoiceCompanies.map((company) => (
+                  {companies.map((company) => (
                     <option
                       key={company.id}
                       value={company.id}
@@ -643,19 +739,19 @@ if (invs) setInvoices(invs);
                       : "Selecciona primero una empresa"}
                   </option>
 
-                  {invoiceProjects
-                    .filter(
-                      (project) =>
-                        project.company_id === invoiceForm.company_id
-                    )
-                    .map((project) => (
-                      <option
-                        key={project.id}
-                        value={project.id}
-                      >
-                        {project.nombre}
-                      </option>
-                    ))}
+                  {projects
+  .filter(
+    (project) =>
+      project.company_id === invoiceForm.company_id
+  )
+  .map((project) => (
+    <option
+      key={project.id}
+      value={project.id}
+    >
+      {project.nombre}
+    </option>
+  ))}
                 </select>
               </div>
 
@@ -868,18 +964,14 @@ if (invs) setInvoices(invs);
           Cancelar
         </button>
 
-        <button
-  type="button"
-  onClick={handleGenerateInvoiceNumber}
-  disabled={creatingInvoice}
-  className="rounded-lg bg-[#1E3A8A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#162D6B] disabled:cursor-not-allowed disabled:opacity-60"
->
-  {creatingInvoice
-    ? "Generando..."
-    : generatedInvoiceNumber
-    ? "Generar otro número"
-    : "Crear factura"}
-</button>
+  <button
+          type="button"
+          onClick={handleCreateInvoice}
+          disabled={creatingInvoice}
+          className="rounded-lg bg-[#1E3A8A] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#162D6B] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {creatingInvoice ? "Creando factura..." : "Guardar y crear factura"}
+        </button>
 
       </div>
 

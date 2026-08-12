@@ -83,19 +83,12 @@ export default function ProjectsList() {
     try {
       setIsCreating(true);
 
+      const { data: debugCompanyId, error: debugCompanyError } =
+        await supabase.rpc("current_user_company_id");
 
-
-
-const { data: debugCompanyId, error: debugCompanyError } =
-  await supabase.rpc("current_user_company_id");
-
-console.log("DEBUG usuario:", user.id);
-console.log("DEBUG company_id:", debugCompanyId);
-console.log("DEBUG error company:", debugCompanyError);
-
-
-
-
+      console.log("DEBUG usuario:", user.id);
+      console.log("DEBUG company_id:", debugCompanyId);
+      console.log("DEBUG error company:", debugCompanyError);
 
       const { error: insertError } = await supabase
         .rpc("create_project", {
@@ -151,19 +144,29 @@ console.log("DEBUG error company:", debugCompanyError);
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
+
+      {/* Header - mismo formato que Facturación */}
       <header className="bg-gradient-to-r from-[#102A66] to-[#173B8F] text-white py-8">
         <div className="container mx-auto px-4">
-          <Button
-            onClick={() => setLocation("/area-cliente")}
-            variant="ghost"
-            className="text-white hover:bg-white/10 mb-4 flex gap-2 items-center"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver al Área de Clientes
-          </Button>
-          <h1 className="text-4xl font-bold">Mis Proyectos</h1>
-          <p className="text-white/80 mt-2">Gestiona y revisa el estado de tus automatizaciones y proyectos activos</p>
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+
+            <div>
+              <h1 className="text-4xl font-bold">Mis Proyectos</h1>
+
+              <p className="text-white/80 mt-2">
+                Gestiona y revisa el estado de tus automatizaciones y proyectos activos
+              </p>
+            </div>
+
+            <Button
+              onClick={() => setLocation("/area-cliente")}
+              className="w-full md:w-auto shrink-0 bg-white text-[#173B8F] hover:bg-white/90 font-semibold flex gap-2 items-center justify-center shadow-sm"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Área de Clientes
+            </Button>
+
+          </div>
         </div>
       </header>
 
@@ -187,7 +190,7 @@ console.log("DEBUG error company:", debugCompanyError);
               className="w-full pl-10 pr-4 py-3 border border-[#E8ECF2] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#173B8F] bg-white"
             />
           </div>
-          
+
           <div className="flex gap-2 items-center w-full md:w-auto">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-[#52627A]" />
@@ -225,11 +228,15 @@ console.log("DEBUG error company:", debugCompanyError);
                   Crear Proyecto
                 </Button>
               </DialogTrigger>
+
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Crear Nuevo Proyecto</DialogTitle>
-                  <DialogDescription>Completa los detalles de tu nuevo proyecto de automatización.</DialogDescription>
+                  <DialogDescription>
+                    Completa los detalles de tu nuevo proyecto de automatización.
+                  </DialogDescription>
                 </DialogHeader>
+
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label htmlFor="descripcion">Descripción del Proyecto *</Label>
@@ -237,34 +244,58 @@ console.log("DEBUG error company:", debugCompanyError);
                       id="descripcion"
                       placeholder="Describe lo que necesitas automatizar..."
                       value={createForm.descripcion}
-                      onChange={(e) => setCreateForm({ ...createForm, descripcion: e.target.value })}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          descripcion: e.target.value
+                        })
+                      }
                       rows={5}
                       required
                     />
                   </div>
+
                   <div className="grid gap-2">
                     <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
                     <Input
                       id="fecha_inicio"
                       type="date"
                       value={createForm.fecha_inicio}
-                      onChange={(e) => setCreateForm({ ...createForm, fecha_inicio: e.target.value })}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          fecha_inicio: e.target.value
+                        })
+                      }
                     />
                   </div>
+
                   <div className="grid gap-2">
-                    <Label htmlFor="fecha_fin">Fecha de Finalización (Opcional)</Label>
+                    <Label htmlFor="fecha_fin">
+                      Fecha de Finalización (Opcional)
+                    </Label>
                     <Input
                       id="fecha_fin"
                       type="date"
                       value={createForm.fecha_fin}
-                      onChange={(e) => setCreateForm({ ...createForm, fecha_fin: e.target.value })}
+                      onChange={(e) =>
+                        setCreateForm({
+                          ...createForm,
+                          fecha_fin: e.target.value
+                        })
+                      }
                     />
                   </div>
                 </div>
+
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsCreateDialogOpen(false)}
+                  >
                     Cancelar
                   </Button>
+
                   <Button
                     className="bg-[#173B8F] hover:bg-[#102A66] text-white"
                     onClick={handleCreateProject}
@@ -290,7 +321,9 @@ console.log("DEBUG error company:", debugCompanyError);
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <Loader2 className="h-12 w-12 text-[#173B8F] animate-spin mx-auto mb-4" />
-              <p className="text-[#52627A]">Cargando tus proyectos...</p>
+              <p className="text-[#52627A]">
+                Cargando tus proyectos...
+              </p>
             </div>
           </div>
         ) : filteredProjects.length === 0 ? (
@@ -298,14 +331,19 @@ console.log("DEBUG error company:", debugCompanyError);
             <div className="mx-auto w-16 h-16 bg-[#173B8F]/10 rounded-full flex items-center justify-center mb-4">
               <Zap className="h-8 w-8 text-[#173B8F]" />
             </div>
-            <h3 className="text-lg font-bold text-[#102A66]">No se encontraron proyectos</h3>
+
+            <h3 className="text-lg font-bold text-[#102A66]">
+              No se encontraron proyectos
+            </h3>
+
             <p className="text-[#52627A] mt-2 max-w-sm mx-auto">
-              {searchTerm || statusFilter !== "all" 
-                ? "No hay proyectos que coincidan con los filtros aplicados." 
+              {searchTerm || statusFilter !== "all"
+                ? "No hay proyectos que coincidan con los filtros aplicados."
                 : "Comienza creando tu primer proyecto de automatización para optimizar tu negocio."}
             </p>
+
             {!searchTerm && statusFilter === "all" && (
-              <Button 
+              <Button
                 className="mt-6 bg-[#173B8F] hover:bg-[#102A66] text-white"
                 onClick={() => setIsCreateDialogOpen(true)}
               >
@@ -313,8 +351,9 @@ console.log("DEBUG error company:", debugCompanyError);
                 Crear mi primer proyecto
               </Button>
             )}
+
             {(searchTerm || statusFilter !== "all") && (
-              <Button 
+              <Button
                 variant="outline"
                 className="mt-6"
                 onClick={() => {
@@ -329,29 +368,45 @@ console.log("DEBUG error company:", debugCompanyError);
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProjects.map((project) => (
-              <Card key={project.id} className="p-6 border border-[#E8ECF2] hover:border-[#173B8F] hover:shadow-lg transition-all duration-300">
+              <Card
+                key={project.id}
+                className="p-6 border border-[#E8ECF2] hover:border-[#173B8F] hover:shadow-lg transition-all duration-300"
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-[#173B8F]/10 p-3 rounded-lg text-[#173B8F]">
                     <Zap className="w-5 h-5" />
                   </div>
+
                   {getStatusBadge(project.estado)}
                 </div>
-                <h3 className="text-xl font-bold text-[#102A66] mb-2">{project.nombre}</h3>
+
+                <h3 className="text-xl font-bold text-[#102A66] mb-2">
+                  {project.nombre}
+                </h3>
+
                 <p className="text-[#52627A] text-sm line-clamp-3 mb-4 min-h-[4.5rem]">
                   {project.descripcion || "Sin descripción disponible."}
                 </p>
+
                 <div className="pt-4 border-t border-[#E8ECF2]">
                   <div className="space-y-2 text-xs text-[#52627A]">
+
                     <div className="flex justify-between">
                       <span>Inicio:</span>
-                      <span className="font-semibold">{new Date(project.fecha_inicio).toLocaleDateString("es-ES")}</span>
+                      <span className="font-semibold">
+                        {new Date(project.fecha_inicio).toLocaleDateString("es-ES")}
+                      </span>
                     </div>
+
                     {project.fecha_fin && (
                       <div className="flex justify-between">
                         <span>Finalización:</span>
-                        <span className="font-semibold">{new Date(project.fecha_fin).toLocaleDateString("es-ES")}</span>
+                        <span className="font-semibold">
+                          {new Date(project.fecha_fin).toLocaleDateString("es-ES")}
+                        </span>
                       </div>
                     )}
+
                   </div>
                 </div>
               </Card>
@@ -363,7 +418,9 @@ console.log("DEBUG error company:", debugCompanyError);
       {/* Footer */}
       <footer className="bg-[#102A66] text-white py-8 mt-20">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-white/60 text-sm">© {new Date().getFullYear()} Modira. Todos los derechos reservados.</p>
+          <p className="text-white/60 text-sm">
+            © {new Date().getFullYear()} Modira. Todos los derechos reservados.
+          </p>
         </div>
       </footer>
     </div>

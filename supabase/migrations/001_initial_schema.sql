@@ -5,22 +5,39 @@ BEGIN;
 -- 001_initial_schema.sql
 -- PostgreSQL / Supabase
 --
--- ARQUITECTURA:
--- auth.users
---      ↓
--- profiles
---      ↓
--- companies
---      ↓
--- ┌──────────┬──────────┬──────────┬──────────────┐
--- clients  projects  quotations  invoices       │
---                       │          │             │
---                       └──────────┴── payments   │
---                                                │
--- budgets / support_tickets / automations ───────┘
+-- OBJETIVO:
+-- Crear la estructura base completa de MODIRA.
 --
--- Supabase es la fuente de verdad.
--- No depende de Drizzle.
+-- IMPORTANTE:
+-- - Esta migración define únicamente la estructura.
+-- - La seguridad/RLS se implementa posteriormente.
+-- - El registro de usuarios se implementa posteriormente.
+-- - Los trabajadores se registran administrativamente.
+-- - Supabase Auth es la fuente de identidad.
+--
+-- ESTRUCTURA:
+--
+-- auth.users
+--      │
+--      ├── profiles
+--      ├── workers
+--      │
+--      └── datos de negocio
+--
+-- companies
+--      │
+--      ├── clients
+--      ├── projects
+--      ├── quotations
+--      ├── invoices
+--      ├── payments
+--      ├── budgets
+--      ├── support_tickets
+--      └── automations
+--
+-- Además:
+-- audit_requests → solicitudes públicas de auditoría
+--
 -- ============================================================
 
 
@@ -69,8 +86,13 @@ CREATE TABLE public.companies (
 
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
 
-    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_by UUID
+        REFERENCES auth.users(id)
+        ON DELETE SET NULL,
+
+    updated_by UUID
+        REFERENCES auth.users(id)
+        ON DELETE SET NULL,
 
     settings JSONB NOT NULL DEFAULT '{}'::jsonb,
 
@@ -126,7 +148,6 @@ CREATE TABLE public.clients (
 
     email VARCHAR(320),
     telefono TEXT,
-
     contacto_principal TEXT,
 
     cif_vat TEXT,
@@ -151,6 +172,22 @@ CREATE TABLE public.clients (
 
 -- ============================================================
 -- 5. PROJECTS
+--
+-- IMPORTANTE:
+-- company_id es OPCIONAL.
+--
+-- Esto permite desde el principio:
+--
+-- Cliente con empresa:
+-- user_id    → usuario
+-- company_id → empresa
+--
+-- Cliente sin empresa:
+-- user_id    → usuario
+-- company_id → NULL
+--
+-- La seguridad sobre quién puede crear/ver cada proyecto
+-- se implementará en la migración de proyectos.
 -- ============================================================
 
 CREATE TABLE public.projects (
@@ -160,24 +197,37 @@ CREATE TABLE public.projects (
         REFERENCES auth.users(id)
         ON DELETE CASCADE,
 
-    company_id UUID NOT NULL
+    company_id UUID
         REFERENCES public.companies(id)
-        ON DELETE CASCADE,
+        ON DELETE SET NULL,
 
     client_id UUID
         REFERENCES public.clients(id)
         ON DELETE SET NULL,
 
     nombre TEXT NOT NULL,
+
     descripcion TEXT,
 
-    estado TEXT NOT NULL DEFAULT 'activo',
+    estado TEXT NOT NULL DEFAULT 'Pendiente',
 
     fecha_inicio TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_fin TIMESTAMPTZ,
 
+
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+
+    CONSTRAINT projects_estado_check
+    CHECK (
+        estado IN (
+            'Pendiente',
+            'Activo',
+            'Pausado',
+            'Entregado',
+            'Completado'
+        )
+    )
 );
 
 
@@ -241,6 +291,14 @@ CREATE TABLE public.quotations (
 
 -- ============================================================
 -- 7. INVOICES
+--
+-- numero_factura es GLOBALMENTE único.
+--
+-- No utilizamos:
+-- UNIQUE(company_id, numero_factura)
+--
+-- porque MODIRA necesita identificadores de factura únicos
+-- en todo el sistema.
 -- ============================================================
 
 CREATE TABLE public.invoices (
@@ -266,7 +324,7 @@ CREATE TABLE public.invoices (
         REFERENCES public.quotations(id)
         ON DELETE SET NULL,
 
-    numero_factura TEXT NOT NULL,
+    numero_factura TEXT NOT NULL UNIQUE,
 
     monto NUMERIC(12,2) NOT NULL DEFAULT 0,
 
@@ -286,9 +344,6 @@ CREATE TABLE public.invoices (
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT invoices_company_number_unique
-        UNIQUE (company_id, numero_factura),
 
     CONSTRAINT invoices_amount_check
         CHECK (monto >= 0)
@@ -363,6 +418,8 @@ CREATE TABLE public.budgets (
     descripcion TEXT,
 
     estado TEXT NOT NULL DEFAULT 'pendiente',
+    
+
 
     fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_aprobacion TIMESTAMPTZ,
@@ -455,11 +512,61 @@ CREATE TABLE public.automations (
 
 
 -- ============================================================
--- 12. MODIRA - EMPRESA INICIAL
+-- 12. AUDIT REQUESTS
 --
--- Se crea antes de asociar profiles.
--- created_by se deja NULL porque los usuarios pueden
--- existir ya en auth.users antes de esta migración.
+-- Solicitudes procedentes de la web pública.
+--
+-- La seguridad de esta tabla se definirá posteriormente.
+-- ============================================================
+
+CREATE TABLE public.audit_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    nombre TEXT NOT NULL,
+    email VARCHAR(320) NOT NULL,
+    empresa TEXT NOT NULL,
+    empleados VARCHAR(50) NOT NULL,
+    proceso TEXT NOT NULL,
+
+    estado VARCHAR(50) NOT NULL DEFAULT 'nuevo',
+
+    notas_internas TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ============================================================
+-- 13. WORKERS
+--
+-- Los trabajadores se crean administrativamente.
+--
+-- auth.users
+--     ↓
+-- workers.auth_user_id
+--
+-- La seguridad de esta tabla se definirá en la migración 002.
+-- ============================================================
+
+CREATE TABLE public.workers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    auth_user_id UUID NOT NULL UNIQUE
+        REFERENCES auth.users(id)
+        ON DELETE CASCADE,
+
+    display_name TEXT,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ============================================================
+-- 14. EMPRESA INICIAL DE MODIRA
 -- ============================================================
 
 INSERT INTO public.companies (
@@ -481,101 +588,14 @@ VALUES (
     'es',
     'EUR',
     TRUE
-);
-
-
--- ============================================================
--- 13. CREAR PERFILES PARA USUARIOS EXISTENTES
---
--- Si ya existen usuarios en Supabase Auth, se crean aquí.
--- El email se utiliza temporalmente como nombre si no existe
--- información adicional.
--- ============================================================
-
-INSERT INTO public.profiles (
-    id,
-    nombre,
-    company_id,
-    rol
 )
-SELECT
-    au.id,
-    COALESCE(
-        NULLIF(au.raw_user_meta_data->>'nombre', ''),
-        NULLIF(au.raw_user_meta_data->>'name', ''),
-        au.email,
-        'Usuario'
-    ),
-    c.id,
-    'user'
-FROM auth.users au
-CROSS JOIN public.companies c
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM public.profiles p
-    WHERE p.id = au.id
-);
+ON CONFLICT (company_code) DO NOTHING;
 
 
 -- ============================================================
--- 14. TRIGGER PARA NUEVOS USUARIOS
+-- 15. FUNCIÓN GENERAL updated_at
 --
--- Todo usuario nuevo recibe inicialmente acceso a Modira.
--- En una futura fase de onboarding se podrá permitir que
--- el usuario cree/seleccione su propia empresa.
--- ============================================================
-
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_company_id UUID;
-BEGIN
-
-    SELECT id
-    INTO v_company_id
-    FROM public.companies
-    WHERE company_code = 'MODIRA-001'
-    LIMIT 1;
-
-    INSERT INTO public.profiles (
-        id,
-        nombre,
-        company_id,
-        rol
-    )
-    VALUES (
-        NEW.id,
-        COALESCE(
-            NULLIF(NEW.raw_user_meta_data->>'nombre', ''),
-            NULLIF(NEW.raw_user_meta_data->>'name', ''),
-            NEW.email,
-            'Usuario'
-        ),
-        v_company_id,
-        'user'
-    )
-    ON CONFLICT (id) DO NOTHING;
-
-    RETURN NEW;
-END;
-$$;
-
-
-DROP TRIGGER IF EXISTS on_auth_user_created
-ON auth.users;
-
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_new_user();
-
-
--- ============================================================
--- 15. FUNCIÓN UPDATED_AT
+-- Todas las tablas con updated_at utilizan la misma función.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
@@ -590,7 +610,7 @@ $$;
 
 
 -- ============================================================
--- 16. TRIGGERS UPDATED_AT
+-- 16. TRIGGERS updated_at
 -- ============================================================
 
 CREATE TRIGGER companies_updated_at
@@ -598,48 +618,69 @@ BEFORE UPDATE ON public.companies
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+
 CREATE TRIGGER profiles_updated_at
 BEFORE UPDATE ON public.profiles
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
 
 CREATE TRIGGER clients_updated_at
 BEFORE UPDATE ON public.clients
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+
 CREATE TRIGGER projects_updated_at
 BEFORE UPDATE ON public.projects
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
 
 CREATE TRIGGER quotations_updated_at
 BEFORE UPDATE ON public.quotations
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+
 CREATE TRIGGER invoices_updated_at
 BEFORE UPDATE ON public.invoices
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
 
 CREATE TRIGGER payments_updated_at
 BEFORE UPDATE ON public.payments
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+
 CREATE TRIGGER budgets_updated_at
 BEFORE UPDATE ON public.budgets
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
 
 CREATE TRIGGER support_tickets_updated_at
 BEFORE UPDATE ON public.support_tickets
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+
 CREATE TRIGGER automations_updated_at
 BEFORE UPDATE ON public.automations
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+
+
+CREATE TRIGGER audit_requests_updated_at
+BEFORE UPDATE ON public.audit_requests
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+
+
+CREATE TRIGGER workers_updated_at
+BEFORE UPDATE ON public.workers
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
@@ -651,340 +692,173 @@ EXECUTE FUNCTION public.update_updated_at_column();
 CREATE INDEX idx_profiles_company_id
     ON public.profiles(company_id);
 
+
 CREATE INDEX idx_clients_company_id
     ON public.clients(company_id);
+
+
+CREATE INDEX idx_projects_user_id
+    ON public.projects(user_id);
+
 
 CREATE INDEX idx_projects_company_id
     ON public.projects(company_id);
 
+
 CREATE INDEX idx_projects_client_id
     ON public.projects(client_id);
+
 
 CREATE INDEX idx_quotations_company_id
     ON public.quotations(company_id);
 
+
+CREATE INDEX idx_quotations_user_id
+    ON public.quotations(user_id);
+
+
 CREATE INDEX idx_quotations_client_id
     ON public.quotations(client_id);
+
 
 CREATE INDEX idx_quotations_project_id
     ON public.quotations(project_id);
 
+
 CREATE INDEX idx_invoices_company_id
     ON public.invoices(company_id);
+
+
+CREATE INDEX idx_invoices_user_id
+    ON public.invoices(user_id);
+
 
 CREATE INDEX idx_invoices_client_id
     ON public.invoices(client_id);
 
+
 CREATE INDEX idx_invoices_project_id
     ON public.invoices(project_id);
+
 
 CREATE INDEX idx_invoices_quotation_id
     ON public.invoices(quotation_id);
 
+
 CREATE INDEX idx_payments_company_id
     ON public.payments(company_id);
+
+
+CREATE INDEX idx_payments_user_id
+    ON public.payments(user_id);
+
 
 CREATE INDEX idx_payments_invoice_id
     ON public.payments(invoice_id);
 
+
 CREATE INDEX idx_payments_quotation_id
     ON public.payments(quotation_id);
+
 
 CREATE INDEX idx_budgets_company_id
     ON public.budgets(company_id);
 
+
+CREATE INDEX idx_budgets_user_id
+    ON public.budgets(user_id);
+
+
 CREATE INDEX idx_budgets_project_id
     ON public.budgets(project_id);
 
+
 CREATE INDEX idx_support_tickets_company_id
     ON public.support_tickets(company_id);
+
+
+CREATE INDEX idx_support_tickets_user_id
+    ON public.support_tickets(user_id);
+
 
 CREATE INDEX idx_automations_company_id
     ON public.automations(company_id);
 
 
--- ============================================================
--- 18. FUNCIÓN SEGURA PARA OBTENER LA EMPRESA DEL USUARIO
---
--- IMPORTANTE:
--- SECURITY DEFINER evita la recursión RLS de profiles.
--- No hace SELECT sobre profiles desde una policy directamente.
--- ============================================================
+CREATE INDEX idx_automations_user_id
+    ON public.automations(user_id);
 
-CREATE OR REPLACE FUNCTION public.current_user_company_id()
-RETURNS UUID
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-    SELECT p.company_id
-    FROM public.profiles p
-    WHERE p.id = auth.uid()
-    LIMIT 1;
-$$;
+
+CREATE INDEX idx_audit_requests_created_at
+    ON public.audit_requests(created_at DESC);
+
+
+CREATE INDEX idx_audit_requests_estado
+    ON public.audit_requests(estado);
+
+
+CREATE INDEX idx_audit_requests_email
+    ON public.audit_requests(email);
+
+
+CREATE INDEX idx_workers_auth_user_id
+    ON public.workers(auth_user_id);
 
 
 -- ============================================================
--- 19. FUNCIÓN PARA SABER SI EL USUARIO ES ADMIN
--- ============================================================
-
-CREATE OR REPLACE FUNCTION public.current_user_is_admin()
-RETURNS BOOLEAN
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-    SELECT EXISTS (
-        SELECT 1
-        FROM public.profiles p
-        WHERE p.id = auth.uid()
-          AND p.rol = 'admin'
-    );
-$$;
-
-
--- ============================================================
--- 20. RLS
--- ============================================================
-
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.budgets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.automations ENABLE ROW LEVEL SECURITY;
-
-
--- ============================================================
--- 21. COMPANIES POLICIES
--- ============================================================
-
-CREATE POLICY companies_select_own
-ON public.companies
-FOR SELECT
-TO authenticated
-USING (
-    id = public.current_user_company_id()
-);
-
-CREATE POLICY companies_update_own
-ON public.companies
-FOR UPDATE
-TO authenticated
-USING (
-    id = public.current_user_company_id()
-)
-WITH CHECK (
-    id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 22. PROFILES POLICIES
---
--- No se consulta profiles dentro de la propia policy.
--- Esto evita la recursión que provocaba el error anterior.
--- ============================================================
-
-CREATE POLICY profiles_select_own
-ON public.profiles
-FOR SELECT
-TO authenticated
-USING (
-    id = auth.uid()
-);
-
-CREATE POLICY profiles_insert_own
-ON public.profiles
-FOR INSERT
-TO authenticated
-WITH CHECK (
-    id = auth.uid()
-);
-
-CREATE POLICY profiles_update_own
-ON public.profiles
-FOR UPDATE
-TO authenticated
-USING (
-    id = auth.uid()
-)
-WITH CHECK (
-    id = auth.uid()
-);
-
-
--- ============================================================
--- 23. CLIENTS POLICIES
--- ============================================================
-
-CREATE POLICY clients_company_access
-ON public.clients
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 24. PROJECTS POLICIES
--- ============================================================
-
-CREATE POLICY projects_company_access
-ON public.projects
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 25. QUOTATIONS POLICIES
--- ============================================================
-
-CREATE POLICY quotations_company_access
-ON public.quotations
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 26. INVOICES POLICIES
--- ============================================================
-
-CREATE POLICY invoices_company_access
-ON public.invoices
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 27. PAYMENTS POLICIES
--- ============================================================
-
-CREATE POLICY payments_company_access
-ON public.payments
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 28. BUDGETS POLICIES
--- ============================================================
-
-CREATE POLICY budgets_company_access
-ON public.budgets
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 29. SUPPORT TICKETS POLICIES
--- ============================================================
-
-CREATE POLICY support_tickets_company_access
-ON public.support_tickets
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 30. AUTOMATIONS POLICIES
--- ============================================================
-
-CREATE POLICY automations_company_access
-ON public.automations
-FOR ALL
-TO authenticated
-USING (
-    company_id = public.current_user_company_id()
-)
-WITH CHECK (
-    company_id = public.current_user_company_id()
-);
-
-
--- ============================================================
--- 31. COMMENTS
+-- 18. COMENTARIOS DE ESTRUCTURA
 -- ============================================================
 
 COMMENT ON TABLE public.companies IS
-'Empresas/organizaciones de Modira. Unidad principal de aislamiento multiempresa.';
+'Empresas/organizaciones de MODIRA. Unidad principal de aislamiento multiempresa.';
+
 
 COMMENT ON TABLE public.profiles IS
-'Perfil de usuario asociado a Supabase Auth y a una empresa.';
+'Perfil de usuario asociado a Supabase Auth y opcionalmente a una empresa.';
+
 
 COMMENT ON TABLE public.clients IS
-'Clientes gestionados por cada empresa de Modira.';
+'Clientes gestionados por cada empresa de MODIRA.';
+
 
 COMMENT ON TABLE public.projects IS
-'Proyectos pertenecientes a una empresa y opcionalmente a un cliente.';
+'Proyectos de MODIRA. Pueden pertenecer a una empresa o inicialmente solo a un usuario.';
+
 
 COMMENT ON TABLE public.quotations IS
 'Presupuestos comerciales de cada empresa.';
 
+
 COMMENT ON TABLE public.invoices IS
 'Facturas de cada empresa.';
+
 
 COMMENT ON TABLE public.payments IS
 'Pagos asociados a facturas o presupuestos.';
 
+
 COMMENT ON TABLE public.budgets IS
-'Presupuestos internos/proyectos de cada empresa.';
+'Presupuestos internos asociados a proyectos.';
+
 
 COMMENT ON TABLE public.support_tickets IS
-'Tickets de soporte de los usuarios de Modira.';
+'Tickets de soporte de los clientes de MODIRA.';
+
 
 COMMENT ON TABLE public.automations IS
-'Automatizaciones configuradas por empresa.';
+'Automatizaciones configuradas por las empresas de MODIRA.';
+
+
+COMMENT ON TABLE public.audit_requests IS
+'Solicitudes de auditoría gratuita procedentes de la web pública.';
+
+
+COMMENT ON TABLE public.workers IS
+'Trabajadores internos de MODIRA vinculados a cuentas de Supabase Auth.';
 
 
 -- ============================================================
--- 32. VERIFICACIONES FINALES
+-- 19. VERIFICACIONES FINALES
 -- ============================================================
 
 DO $$
@@ -1007,14 +881,17 @@ BEGIN
           'payments',
           'budgets',
           'support_tickets',
-          'automations'
+          'automations',
+          'audit_requests',
+          'workers'
       );
 
-    IF v_tables <> 10 THEN
+    IF v_tables <> 12 THEN
         RAISE EXCEPTION
-            'Initial migration failed: expected 10 public tables, found %',
+            '001_initial_schema failed: expected 12 public tables, found %',
             v_tables;
     END IF;
+
 
     SELECT id
     INTO v_company_id
@@ -1022,9 +899,43 @@ BEGIN
     WHERE company_code = 'MODIRA-001'
     LIMIT 1;
 
+
     IF v_company_id IS NULL THEN
         RAISE EXCEPTION
-            'Initial migration failed: Modira company was not created';
+            '001_initial_schema failed: MODIRA-001 was not created';
+    END IF;
+
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'projects'
+          AND column_name = 'company_id'
+          AND is_nullable = 'YES'
+    ) THEN
+        RAISE EXCEPTION
+            '001_initial_schema failed: projects.company_id must allow NULL';
+    END IF;
+
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'public.invoices'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) LIKE '%numero_factura%'
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'invoices'
+          AND indexdef LIKE '%UNIQUE INDEX%'
+          AND indexdef LIKE '%numero_factura%'
+    ) THEN
+        RAISE EXCEPTION
+            '001_initial_schema failed: invoices.numero_factura must be unique';
     END IF;
 
 END $$;

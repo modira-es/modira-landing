@@ -153,16 +153,16 @@ export default function Support() {
       {/* Header */}
       <header className="bg-gradient-to-r from-[#102A66] to-[#173B8F] text-white py-8">
         <div className="container mx-auto px-4">
-          <Button
-            onClick={() => setLocation("/area-cliente")}
-            variant="ghost"
-            className="text-white hover:bg-white/10 mb-4 flex gap-2 items-center"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver al Área de Clientes
-          </Button>
-          <h1 className="text-4xl font-bold">Soporte Técnico</h1>
-          <p className="text-white/80 mt-2">¿Necesitas ayuda? Abre un ticket y nuestro equipo te asistirá</p>
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-4xl font-bold">Soporte Técnico</h1>
+              <p className="text-white/80 mt-2">¿Necesitas ayuda? Abre un ticket y nuestro equipo te asistirá</p>
+            </div>
+            <Button onClick={() => setLocation("/area-cliente")} className="w-full md:w-auto shrink-0 bg-white text-[#173B8F] hover:bg-white/90 font-semibold flex gap-2 items-center justify-center shadow-sm">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al Área de Clientes
+            </Button>
+          </div>
         </div>
       </header>
 
