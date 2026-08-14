@@ -309,7 +309,7 @@ export default function Support() {
       {/* Footer */}
       <footer className="bg-[#102A66] text-white py-8 mt-20">
         <div className="container mx-auto px-4 text-center text-white/70 text-sm">
-          <p>© 2024 Modira. Todos los derechos reservados.</p>
+          <p>© {new Date().getFullYear()} Modira. Todos los derechos reservados.</p>
         </div>
       </footer>
     </div>

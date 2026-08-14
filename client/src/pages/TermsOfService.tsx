@@ -143,7 +143,7 @@ export default function TermsOfService() {
               Si tienes preguntas sobre estos Términos y Condiciones, contacta con nosotros:
             </p>
             <div className="bg-[#F5F7FA] p-6 rounded-lg mt-4">
-              <p className="text-gray-700"><strong>Email:</strong> info@modira.es</p>
+              <p className="text-gray-700"><strong>Email:</strong> modira.information@gmail.com</p>
               <p className="text-gray-700 mt-2"><strong>Asunto:</strong> Términos y Condiciones</p>
             </div>
           </section>

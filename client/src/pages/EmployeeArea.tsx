@@ -109,18 +109,18 @@ const [invoiceForm, setInvoiceForm] = useState({
       }
 
       // ============================================================
-      // 3. AUDITORÍAS
-      // ============================================================
-      const { data: audits, error: auditsError } = await supabase
-        .from("audit_requests")
-        .select("*")
-        .order("created_at", { ascending: true });
+// 3. AUDITORÍAS
+// ============================================================
+const { data: audits, error: auditsError } = await supabase
+  .from("audit_requests")
+  .select("*")
+  .order("created_at", { ascending: false });
 
-      if (auditsError) {
-        console.error("[EmployeeArea] Error loading audits:", auditsError);
-      } else {
-        setAuditRequests(audits || []);
-      }
+if (auditsError) {
+  console.error("[EmployeeArea] Error loading audits:", auditsError);
+} else {
+  setAuditRequests(audits || []);
+}
 
       // ============================================================
       // 4. FACTURAS
@@ -384,12 +384,12 @@ const [invoiceForm, setInvoiceForm] = useState({
                         <TableCell>{req.email}</TableCell>
                         <TableCell>{req.empresa}</TableCell>
                         <TableCell className="text-center">{req.empleados}</TableCell>
-                        <TableCell className="max-w-[200px] truncate" title={req.proceso_manual}>
-                          {req.proceso_manual}
+                        <TableCell className="max-w-[200px] truncate" title={req.proceso}>
+                          {req.proceso}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={req.status === 'completed' ? 'default' : 'secondary'} className="capitalize">
-                            {req.status || 'pendiente'}
+                          <Badge variant={req.estado === 'completed' ? 'default' : 'secondary'} className="capitalize">
+                            {req.estado || 'pendiente'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-gray-500">

@@ -840,7 +840,7 @@ export default function ClientBilling() {
 
       <footer className="mt-16 border-t bg-white py-8">
         <div className="container mx-auto px-4 text-center text-sm text-[#7B8798]">
-          <p>© 2024 Modira. Todos los derechos reservados.</p>
+          <p>© {new Date().getFullYear()} Modira. Todos los derechos reservados.</p>
         </div>
       </footer>
     </div>

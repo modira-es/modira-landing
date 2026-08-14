@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
 import HowWeWork from "@/components/HowWeWork";
+import { AIChatBot } from "@/components/AIChatBot";
 import {
   Accordion,
   AccordionContent,
@@ -23,6 +24,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const [formData, setFormData] = useState({
@@ -48,10 +50,43 @@ export default function Home() {
     });
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("Formulario enviado:", formData);
+const handleFormSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  try {
+    const { error } = await supabase
+      .from("audit_requests")
+      .insert([
+        {
+          nombre: formData.nombre,
+          email: formData.email,
+          empresa: formData.empresa,
+          empleados: formData.empleados,
+          proceso: formData.proceso,
+        },
+      ]);
+
+    if (error) {
+      console.error("========== ERROR SUPABASE ==========");
+      console.error("Mensaje:", error.message);
+      console.error("Código:", error.code);
+      console.error("Detalles:", error.details);
+      console.error("Hint:", error.hint);
+      console.error("====================================");
+
+      alert(
+        `Error de Supabase:\n\n${error.message}\n\nCódigo: ${
+          error.code || "N/A"
+        }`
+      );
+
+      return;
+    }
+
+    console.log("Auditoría creada correctamente");
+
     alert("Gracias por tu solicitud. Te contactaremos pronto.");
+
     setFormData({
       nombre: "",
       email: "",
@@ -59,8 +94,11 @@ export default function Home() {
       empleados: "",
       proceso: "",
     });
-  };
-
+  } catch (error) {
+    console.error("Error inesperado:", error);
+    alert("Ha ocurrido un error inesperado.");
+  }
+};
   const handleSavingsChange = (field: string, value: number) => {
     setSavingsData({
       ...savingsData,
@@ -83,7 +121,7 @@ export default function Home() {
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -mr-48 -mt-48"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -ml-48 -mb-48"></div>
 
-        <div className="container mx-auto px-4 relative z-10">
+        <div className="container mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 xl:px-16 relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
               <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight">
@@ -122,11 +160,14 @@ export default function Home() {
               </div>
             </div>
             <div className="relative hidden md:block">
-              <img
-                src="/Images/hero-automation.png"
-                alt="Automatización de procesos"
-                className="rounded-2xl shadow-2xl w-full h-auto"
-              />
+              <video
+  src="/Images/modira_video_loop.mp4"
+  autoPlay
+  loop
+  muted
+  playsInline
+  className="rounded-2xl shadow-2xl w-full h-auto"
+/>
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-t from-black/10 to-transparent"></div>
             </div>
           </div>
@@ -135,7 +176,7 @@ export default function Home() {
 
       {/* Statistics Section - Premium Cards */}
       <section className="py-16 md:py-24 bg-[#F4F6F9]">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="grid md:grid-cols-4 gap-6">
             {[
               {
@@ -187,7 +228,7 @@ export default function Home() {
 
       {/* Problema Section - Enhanced */}
       <section className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div className="relative order-2 md:order-1">
               <img
@@ -228,7 +269,7 @@ export default function Home() {
 
       {/* Solución Section - Enhanced */}
       <section className="py-16 md:py-24 bg-[#F4F6F9]">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4 leading-tight">
               La solución: Automatización inteligente
@@ -289,7 +330,7 @@ export default function Home() {
 
       {/* Before/After Section */}
       <section className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4">
               De procesos manuales a sistemas que trabajan por ti
@@ -349,7 +390,7 @@ export default function Home() {
 
       {/* ROI Calculator Section */}
       <section className="py-16 md:py-24 bg-[#F4F6F9]">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4">
               ¿Cuánto podrías ahorrar?
@@ -463,7 +504,7 @@ export default function Home() {
 
       {/* Servicios Section */}
       <section id="servicios" className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
             <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4">
               Nuestros servicios
@@ -489,7 +530,7 @@ export default function Home() {
                 ],
               },
               {
-                title: "Sistemas de automatización avanzados",
+                title: "Sistemas de\nautomatización avanzados",
                 price: "Desde 1.500 €",
                 description:
                   "Para empresas que necesitan conectar múltiples áreas.",
@@ -530,7 +571,7 @@ export default function Home() {
     </div>
   )}
                 <h3 className="text-2xl font-bold text-[#102A66] mb-2">
-                  {service.title}
+                 {service.title}
                 </h3>
                 <p className="text-3xl font-bold italic text-[#102A66] mb-4">
   {service.price}
@@ -562,7 +603,7 @@ export default function Home() {
 
       {/* Mantenimiento Section */}
       <section className="py-16 md:py-24 bg-[#F4F6F9]">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
             Planes de mantenimiento
           </h2>
@@ -649,9 +690,64 @@ export default function Home() {
         </div>
       </section>
 
+ {/* Por qué elegir Modira Section */}
+      <section className="py-16 md:py-24 bg-white">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
+          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
+            Por qué elegir Modira
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              {[
+                {
+                  title: "100% personalizadas",
+                  description: "Cada solución se adapta a tu negocio específico, no usamos templates genéricos.",
+                },
+                {
+                  title: "Soporte cercano",
+                  description: "Equipo dedicado que entiende tu negocio y está disponible cuando lo necesitas.",
+                },
+                {
+                  title: "Formación incluida",
+                  description: "Tu equipo aprende a mantener y mejorar los sistemas sin depender de nosotros.",
+                },
+                {
+                  title: "Orientados a resultados",
+                  description: "No vendemos horas, vendemos resultados medibles y mejoras en tu negocio.",
+                },
+              ].map((item, idx) => (
+                <div key={idx} className="flex gap-4">
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-[#173B8F]/10">
+                      <CheckCircle2 className="h-6 w-6 text-[#173B8F]" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#102A66] mb-2">
+                      {item.title}
+                    </h3>
+                    <p className="text-[#52627A]">{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="relative">
+              <img
+                src="/Images/team-collaboration_a30b2170.png"
+                alt="Colaboración del equipo"
+                className="rounded-2xl shadow-lg w-full h-auto"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+
       {/* Casos de Éxito Section */}
       <section id="casos-exito" className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4 text-center">
             Ejemplos de transformación
           </h2>
@@ -706,64 +802,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Por qué elegir Modira Section */}
-      <section className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
-            Por qué elegir Modira
-          </h2>
-
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              {[
-                {
-                  title: "100% personalizadas",
-                  description: "Cada solución se adapta a tu negocio específico, no usamos templates genéricos.",
-                },
-                {
-                  title: "Soporte cercano",
-                  description: "Equipo dedicado que entiende tu negocio y está disponible cuando lo necesitas.",
-                },
-                {
-                  title: "Formación incluida",
-                  description: "Tu equipo aprende a mantener y mejorar los sistemas sin depender de nosotros.",
-                },
-                {
-                  title: "Orientados a resultados",
-                  description: "No vendemos horas, vendemos resultados medibles y mejoras en tu negocio.",
-                },
-              ].map((item, idx) => (
-                <div key={idx} className="flex gap-4">
-                  <div className="flex-shrink-0">
-                    <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-[#173B8F]/10">
-                      <CheckCircle2 className="h-6 w-6 text-[#173B8F]" />
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-[#102A66] mb-2">
-                      {item.title}
-                    </h3>
-                    <p className="text-[#52627A]">{item.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="relative">
-              <img
-                src="/Images/team-collaboration_a30b2170.png"
-                alt="Colaboración del equipo"
-                className="rounded-2xl shadow-lg w-full h-auto"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-
 
       {/* FAQ Section */}
       <section id="faq" className="py-16 md:py-24 bg-[#F4F6F9]">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
             Preguntas frecuentes
           </h2>
@@ -824,7 +866,7 @@ export default function Home() {
 
       {/* Auditoría CTA Section */}
       <section id="auditoria" className="py-16 md:py-24 bg-gradient-to-br from-[#102A66] to-[#173B8F]">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="max-w-2xl mx-auto">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 text-center">
               Auditoría gratuita de automatización
@@ -946,10 +988,10 @@ export default function Home() {
                 <span className="text-xl font-bold">Modira</span>
               </div>
               <p className="text-white/70 text-sm mb-4">
-                Automatización inteligente para pymes españolas.
+                Automatización inteligente para empresas.
               </p>
               <p className="text-white/60 text-xs">
-                <strong>Email:</strong> info@modira.es
+                <strong>Email:</strong> modira.information@gmail.com
               </p>
             </div>
             <div>
@@ -972,12 +1014,12 @@ export default function Home() {
               <ul className="space-y-2 text-white/70 text-sm">
                 <li>
                   <a href="/area-cliente" className="hover:text-white transition">
-                    Área Cliente
+                    Área de Clientes
                   </a>
                 </li>
                 <li>
                   <a href="/empleados/login" className="hover:text-white transition">
-                    Área de empleados
+                    Área de Empleados
                   </a>
                 </li>
                 <li>
@@ -1013,16 +1055,18 @@ export default function Home() {
               <div className="text-white/70 text-xs">
                 <p><strong>Modira</strong></p>
                 <p>Servicios de automatización empresarial</p>
-                <p className="mt-2">Email: info@modira.es</p>
+                <p className="mt-2">Email: modira.information@gmail.com</p>
               </div>
               <div className="text-white/70 text-xs text-right md:text-left">
-                <p>© 2024 Modira. Todos los derechos reservados.</p>
+                <p>© {new Date().getFullYear()} Modira. Todos los derechos reservados.</p>
                 <p className="mt-2">Cumplimos con RGPD, LOPDGDD y LSSI-CE</p>
               </div>
             </div>
           </div>
         </div>
       </footer>
+      {/* Chatbot flotante */}
+      <AIChatBot />
     </div>
   );
 }

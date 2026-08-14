@@ -34,7 +34,7 @@ export default function PrivacyPolicy() {
               <strong>Modira</strong> es el responsable del tratamiento de tus datos personales conforme a la normativa de protección de datos vigente (RGPD y LOPDGDD).
             </p>
             <p className="text-gray-700">
-              Para cualquier cuestión relacionada con tus datos personales, puedes contactar con nosotros en: <strong>info@modira.es</strong>
+              Para cualquier cuestión relacionada con tus datos personales, puedes contactar con nosotros en: <strong>modira.information@gmail.com</strong>
             </p>
           </section>
 
@@ -103,7 +103,7 @@ export default function PrivacyPolicy() {
               <li><strong>Limitación:</strong> Limitar el tratamiento de tus datos</li>
             </ul>
             <p className="text-gray-700 mt-4">
-              Para ejercer estos derechos, contacta con: <strong>info@modira.es</strong>
+              Para ejercer estos derechos, contacta con: <strong>modira.information@gmail.com</strong>
             </p>
           </section>
 
@@ -134,7 +134,7 @@ export default function PrivacyPolicy() {
               Si tienes preguntas sobre esta Política de Privacidad o sobre cómo tratamos tus datos, contacta con nosotros:
             </p>
             <div className="bg-[#F5F7FA] p-6 rounded-lg mt-4">
-              <p className="text-gray-700"><strong>Email:</strong> info@modira.es</p>
+              <p className="text-gray-700"><strong>Email:</strong> modira.information@gmail.com</p>
               <p className="text-gray-700 mt-2"><strong>Asunto:</strong> Privacidad y protección de datos</p>
             </div>
           </section>

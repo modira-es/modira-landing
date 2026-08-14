@@ -247,7 +247,7 @@ export default function ClientArea() {
         onLogout={handleLogout}
       />
 
-      <main className="container mx-auto px-4 pt-[120px] pb-14">
+      <main className="container mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 xl:px-16 pt-[120px] pb-14">
         {error && (
           <Card className="mb-10 flex items-center gap-3 border-2 border-red-200 bg-red-50 p-5">
             <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-600" />
@@ -259,7 +259,7 @@ export default function ClientArea() {
         <section className="mb-14">
           <div className="mb-7">
   <h2 className="text-3xl font-bold text-[#102A66]">
-    Acceso rápido
+    Área de Cliente
   </h2>
 
   <p className="mt-2 text-[#52627A]">
@@ -565,7 +565,9 @@ export default function ClientArea() {
         </section> */}
 
         {/* CONTACTO */}
-        <section className="mt-16 rounded-2xl bg-gradient-to-r from-[#102A66] to-[#173B8F] px-6 py-14 text-center text-white md:px-10">
+        <section 
+        id="ayuda"
+        className="mt-16 rounded-2xl bg-gradient-to-r from-[#102A66] to-[#173B8F] px-6 py-14 text-center text-white md:px-10">
           <h2 className="mb-4 text-3xl font-bold md:text-4xl">
             ¿Necesitas ayuda adicional?
           </h2>
@@ -579,7 +581,7 @@ export default function ClientArea() {
             type="button"
             className="bg-white font-semibold text-[#102A66] hover:bg-white/90"
             onClick={() => {
-              window.location.href = "mailto:info@modira.es";
+              window.location.href = "mailto:modira.information@gmail.com";
             }}
           >
             Contactar a Modira
@@ -589,7 +591,7 @@ export default function ClientArea() {
 
       <footer className="mt-20 bg-[#102A66] py-8 text-white">
         <div className="container mx-auto px-4 text-center text-sm text-white/70">
-          <p>© 2024 Modira. Todos los derechos reservados.</p>
+          <p>© {new Date().getFullYear()} Modira. Todos los derechos reservados.</p>
         </div>
       </footer>
     </div>

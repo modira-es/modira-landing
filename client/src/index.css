@@ -1,6 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: "ModiraFont";
+  src: url("/Fonts/Highwaygothicplus30-Modira.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+.modira-font {
+  font-family: "ModiraFont" !important;
+  font-weight: 400 !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -129,10 +141,10 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Funnel Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Funnel Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-weight: 600;
   }
   button:not(:disabled),

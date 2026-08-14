@@ -41,7 +41,7 @@ export default function LegalNotice() {
                 <strong>Actividad:</strong> Servicios de automatización empresarial, desarrollo de soluciones de integración y consultoría en procesos
               </p>
               <p className="text-gray-700">
-                <strong>Email de contacto:</strong> info@modira.es
+                <strong>Email de contacto:</strong> modira.information@gmail.com
               </p>
               <p className="text-gray-700">
                 <strong>Sitio web:</strong> www.modira.es
@@ -148,7 +148,7 @@ export default function LegalNotice() {
               Para cualquier cuestión relacionada con este Aviso Legal, contacta con nosotros:
             </p>
             <div className="bg-[#F5F7FA] p-6 rounded-lg mt-4">
-              <p className="text-gray-700"><strong>Email:</strong> info@modira.es</p>
+              <p className="text-gray-700"><strong>Email:</strong> modira.information@gmail.com</p>
               <p className="text-gray-700 mt-2"><strong>Asunto:</strong> Aviso Legal</p>
             </div>
           </section>
