@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bot, X, Sparkles } from "lucide-react";
 import { AIChatBox, type Message } from "./AIChatBox";
+import { supabase } from "@/lib/supabase";
 
 type AIChatBotProps = {
   /**
@@ -36,6 +37,7 @@ export function AIChatBot({ onAIResponse }: AIChatBotProps) {
     "• Ahorro de tiempo y costes\n\n" +
     "• Cómo funciona Modira\n\n" +
     "• Soluciones para tu empresa\n\n" +
+    "¡Y mucho más!\n\n" +
     "¿En qué puedo ayudarte?",
   },
   ]);
@@ -47,6 +49,15 @@ export function AIChatBot({ onAIResponse }: AIChatBotProps) {
       role: "user",
       content,
     };
+
+    const sessionId =
+  localStorage.getItem("modira_ai_session_id") ||
+  crypto.randomUUID();
+
+localStorage.setItem(
+  "modira_ai_session_id",
+  sessionId
+);
 
     const updatedMessages = [...messages, userMessage];
 
@@ -68,10 +79,24 @@ export function AIChatBot({ onAIResponse }: AIChatBotProps) {
        */
 
       if (onAIResponse) {
-        response = await onAIResponse(updatedMessages);
-      } else {
-        response = getDemoResponse(content);
-      }
+  response = await onAIResponse(updatedMessages);
+} else {
+  const { data, error } = await supabase.functions.invoke(
+    "modira-ai",
+    {
+     body: {
+  messages: updatedMessages,
+  sessionId,
+},
+    }
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  response = data.response;
+}
 
       const assistantMessage: Message = {
         role: "assistant",

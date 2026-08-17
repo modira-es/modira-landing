@@ -41,10 +41,14 @@ const invoiceProjects = projects.filter((project) =>
 );
 
 const [tickets, setTickets] = useState<any[]>([]);
+const [aiConversations, setAiConversations] = useState<any[]>([]);
+const [aiMessages, setAiMessages] = useState<any[]>([]);
+const [selectedAIConversation, setSelectedAIConversation] = useState<any | null>(null);
+const [loadingAIConversation, setLoadingAIConversation] = useState(false);
 const [loading, setLoading] = useState(true);
 
 const [activeTab, setActiveTab] = useState<
-  "projects" | "billing" | "audits" | "tickets"
+  "projects" | "billing" | "audits" | "tickets" | "ai"
 >("projects");
 
 const [showCreateInvoice, setShowCreateInvoice] = useState(false);
@@ -156,6 +160,36 @@ if (auditsError) {
       } else {
         setTickets(tks || []);
       }
+            // ============================================================
+      // 6. CONVERSACIONES IA
+      // ============================================================
+      const { data: aiConversationsData, error: aiConversationsError } =
+        await supabase
+          .from("ai_conversations")
+          .select(`
+            id,
+            session_id,
+            company_id,
+            company_name,
+            business_type,
+            created_at,
+            updated_at
+          `)
+          .order("updated_at", { ascending: false });
+
+      if (aiConversationsError) {
+        console.error(
+          "[EmployeeArea] Error loading AI conversations:",
+          aiConversationsError
+        );
+      } else {
+        console.log(
+          "[EmployeeArea] AI conversations loaded:",
+          aiConversationsData
+        );
+
+        setAiConversations(aiConversationsData || []);
+      }
     } catch (err) {
       console.error("[EmployeeArea] Error fetching data:", err);
     } finally {
@@ -170,6 +204,10 @@ if (auditsError) {
   const handleCreateInvoice = async () => {
     setInvoiceError("");
 
+
+ 
+
+    
     // ============================================================
     // 1. VALIDACIONES DEL FORMULARIO
     // ============================================================
@@ -260,6 +298,7 @@ if (auditsError) {
       });
       setInvoiceError("");
       setGeneratedInvoiceNumber("");
+     
     } catch (error) {
       console.error("[EmployeeArea] Unexpected error creating invoice:", error);
       setInvoiceError("Ha ocurrido un error al crear la factura.");
@@ -267,6 +306,45 @@ if (auditsError) {
       setCreatingInvoice(false);
     }
   };
+
+  const handleOpenAIConversation = async (conversation: any) => {
+    setSelectedAIConversation(conversation);
+    setAiMessages([]);
+    setLoadingAIConversation(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("ai_messages")
+        .select(`
+          id,
+          conversation_id,
+          role,
+          content,
+          created_at
+        `)
+        .eq("conversation_id", conversation.id)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error(
+          "[EmployeeArea] Error loading AI messages:",
+          error
+        );
+        return;
+      }
+
+      setAiMessages(data || []);
+    } catch (error) {
+      console.error(
+        "[EmployeeArea] Unexpected error loading AI conversation:",
+        error
+      );
+    } finally {
+      setLoadingAIConversation(false);
+    }
+  };
+
+
 
   const handleLogout = async () => {
     await signOut();
@@ -337,6 +415,17 @@ if (auditsError) {
         }`}
       >
         Tickets
+      </button>
+            <button
+        type="button"
+        onClick={() => setActiveTab("ai")}
+        className={`pb-4 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
+          activeTab === "ai"
+            ? "border-[#1E3A8A] text-[#1E3A8A]"
+            : "border-transparent text-gray-500 hover:text-[#1E3A8A]"
+        }`}
+      >
+        Conversaciones IA
       </button>
 
     </div>
@@ -995,7 +1084,7 @@ if (auditsError) {
 
     <Card className="border-none shadow-md overflow-hidden">
       <div className="overflow-x-auto">
-        <Table>
+        <Table className="table-fixed w-full">
           <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead className="font-bold">
@@ -1093,7 +1182,458 @@ if (auditsError) {
 
   </section>
 </div>
+
+
+{/* ============================================================
+    CONVERSACIONES IA
+    ============================================================ */}
+
+<div hidden={activeTab !== "ai"}>
+  <section className="space-y-6">
+
+    <div className="flex items-center justify-between">
+
+      <h2 className="text-2xl font-bold text-[#1E3A8A]">
+        Conversaciones IA
+      </h2>
+
+      <Badge
+        variant="outline"
+        className="bg-white"
+      >
+        {aiConversations.length} conversaciones
+      </Badge>
+
+    </div>
+
+    <p className="-mt-4 text-sm text-gray-500">
+      Historial de conversaciones mantenidas con Modira AI.
+    </p>
+
+    {/* TABLA */}
+
+    <Card className="border-none shadow-md overflow-hidden">
+
+      <div className="overflow-x-auto">
+
+        <Table className="table-fixed w-full">
+
+          <TableHeader className="bg-gray-50">
+
+            <TableRow>
+
+              <TableHead className="font-bold">
+                Empresa
+              </TableHead>
+
+              <TableHead className="font-bold">
+                Tipo de negocio
+              </TableHead>
+
+              <TableHead className="font-bold text-center">
+                Sesión
+              </TableHead>
+
+              <TableHead className="font-bold">
+                Inicio
+              </TableHead>
+
+              <TableHead className="font-bold">
+                Última actividad
+              </TableHead>
+
+              <TableHead className="font-bold text-center">
+                Acción
+              </TableHead>
+
+            </TableRow>
+
+          </TableHeader>
+
+
+          <TableBody className="bg-white">
+
+            {aiConversations.length === 0 ? (
+
+              <TableRow>
+
+                <TableCell
+                  colSpan={6}
+                  className="py-10 text-center text-gray-500"
+                >
+                  No hay conversaciones IA registradas.
+                </TableCell>
+
+              </TableRow>
+
+            ) : (
+
+              aiConversations.map((conversation) => (
+
+                <TableRow
+                  key={conversation.id}
+                  className="cursor-pointer transition-colors hover:bg-gray-50"
+                  onClick={() =>
+                    handleOpenAIConversation(conversation)
+                  }
+                >
+
+                  {/* EMPRESA */}
+
+                  <TableCell>
+
+                    <div className="font-semibold text-gray-900">
+                      {conversation.company_name ||
+                        "Empresa no identificada"}
+                    </div>
+
+                    {conversation.company_id && (
+                      <div className="mt-1 text-xs text-gray-400">
+                        Empresa registrada
+                      </div>
+                    )}
+
+                  </TableCell>
+
+
+                  {/* TIPO DE NEGOCIO */}
+
+                  <TableCell>
+
+                    {conversation.business_type ? (
+
+                      <Badge
+                        variant="secondary"
+                        className="font-normal"
+                      >
+                        {conversation.business_type}
+                      </Badge>
+
+                    ) : (
+
+                      <span className="text-sm text-gray-400">
+                        No identificado
+                      </span>
+
+                    )}
+
+                  </TableCell>
+
+
+                  {/* SESIÓN */}
+
+                  <TableCell className="text-center">
+
+                    <span
+                      className="font-mono text-xs text-gray-500"
+                      title={conversation.session_id || ""}
+                    >
+                      {conversation.session_id
+                        ? `${conversation.session_id.slice(0, 8)}...`
+                        : "N/A"}
+                    </span>
+
+                  </TableCell>
+
+
+                  {/* INICIO */}
+
+                  <TableCell className="text-sm text-gray-600">
+
+                    {conversation.created_at
+                      ? formatDate(conversation.created_at)
+                      : "N/A"}
+
+                  </TableCell>
+
+
+                  {/* ÚLTIMA ACTIVIDAD */}
+
+                  <TableCell className="text-sm text-gray-600">
+
+                    {conversation.updated_at
+                      ? formatDate(conversation.updated_at)
+                      : "N/A"}
+
+                  </TableCell>
+
+
+                  {/* ACCIÓN */}
+
+                  <TableCell className="text-center">
+
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleOpenAIConversation(conversation);
+                      }}
+                      className="rounded-lg bg-[#1E3A8A] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#162D6B]"
+                    >
+                      Ver conversación
+                    </button>
+
+                  </TableCell>
+
+                </TableRow>
+
+              ))
+
+            )}
+
+          </TableBody>
+
+        </Table>
+
+      </div>
+
+    </Card>
+
+  </section>
+</div>
 </main>
+{/* ============================================================
+    MODAL — DETALLE DE CONVERSACIÓN IA
+    ============================================================ */}
+
+{selectedAIConversation && (
+
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+    onClick={() => setSelectedAIConversation(null)}
+  >
+
+    <div
+      className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+      onClick={(event) => event.stopPropagation()}
+    >
+
+      {/* HEADER */}
+
+      <div className="flex items-center justify-between border-b px-6 py-5">
+
+        <div>
+
+          <h3 className="text-xl font-bold text-[#1E3A8A]">
+            Conversación IA
+          </h3>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+
+            <Badge variant="outline">
+
+              {selectedAIConversation.company_name ||
+                "Empresa no identificada"}
+
+            </Badge>
+
+            {selectedAIConversation.business_type && (
+
+              <Badge variant="secondary">
+
+                {selectedAIConversation.business_type}
+
+              </Badge>
+
+            )}
+
+          </div>
+
+        </div>
+
+
+        <button
+          type="button"
+          onClick={() => setSelectedAIConversation(null)}
+          className="flex size-9 items-center justify-center rounded-lg text-2xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Cerrar conversación"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      {/* INFORMACIÓN */}
+
+      <div className="border-b bg-gray-50 px-6 py-4">
+
+        <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+
+          <div>
+
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Inicio
+            </p>
+
+            <p className="mt-1 font-medium text-gray-700">
+              {formatDate(selectedAIConversation.created_at)}
+            </p>
+
+          </div>
+
+
+          <div>
+
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Última actividad
+            </p>
+
+            <p className="mt-1 font-medium text-gray-700">
+              {formatDate(selectedAIConversation.updated_at)}
+            </p>
+
+          </div>
+
+
+          <div>
+
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Mensajes
+            </p>
+
+            <p className="mt-1 font-medium text-gray-700">
+              {aiMessages.length}
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* MENSAJES */}
+
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#F5F7FA] px-6 py-6">
+
+        {loadingAIConversation ? (
+
+          <div className="flex min-h-[300px] items-center justify-center">
+
+            <div className="text-sm text-gray-500">
+              Cargando conversación...
+            </div>
+
+          </div>
+
+        ) : aiMessages.length === 0 ? (
+
+          <div className="flex min-h-[300px] items-center justify-center">
+
+            <div className="text-sm text-gray-500">
+              Esta conversación no contiene mensajes.
+            </div>
+
+          </div>
+
+        ) : (
+
+          <div className="space-y-5">
+
+            {aiMessages.map((message) => {
+
+              const isUser =
+                message.role === "user";
+
+              return (
+
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    isUser
+                      ? "justify-end"
+                      : "justify-start"
+                  }`}
+                >
+
+                  <div
+                    className={`max-w-[80%] ${
+                      isUser
+                        ? "items-end"
+                        : "items-start"
+                    }`}
+                  >
+
+                    {/* AUTOR */}
+
+                    <div
+                      className={`mb-1 px-1 text-xs font-semibold ${
+                        isUser
+                          ? "text-right text-gray-500"
+                          : "text-left text-[#1E3A8A]"
+                      }`}
+                    >
+                      {isUser
+                        ? "Visitante"
+                        : "Modira AI"}
+                    </div>
+
+
+                    {/* BURBUJA */}
+
+                    <div
+                      className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                        isUser
+                          ? "rounded-br-md bg-[#1E3A8A] text-white"
+                          : "rounded-bl-md border border-gray-200 bg-white text-gray-800"
+                      }`}
+                    >
+
+                      <div className="whitespace-pre-wrap">
+                        {message.content}
+                      </div>
+
+                    </div>
+
+
+                    {/* FECHA */}
+
+                    <div
+                      className={`mt-1 px-1 text-[11px] text-gray-400 ${
+                        isUser
+                          ? "text-right"
+                          : "text-left"
+                      }`}
+                    >
+                      {formatDate(message.created_at)}
+                    </div>
+
+                  </div>
+
+                </div>
+
+              );
+
+            })}
+
+          </div>
+
+        )}
+
+      </div>
+
+
+      {/* FOOTER */}
+
+      <div className="flex justify-end border-t bg-white px-6 py-4">
+
+        <button
+          type="button"
+          onClick={() => setSelectedAIConversation(null)}
+          className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100"
+        >
+          Cerrar
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+)}
+
       <footer className="bg-white border-t py-8 mt-12">
         <div className="container mx-auto px-4 text-center text-gray-500 text-sm">
           <p>© 2024 Modira. Panel de Gestión Interna.</p>

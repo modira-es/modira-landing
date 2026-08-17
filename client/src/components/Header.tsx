@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Menu, X, Zap } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
@@ -30,32 +29,33 @@ export default function Header() {
     <header
       className={`fixed top-0 left-0 w-full h-[80px] z-50 transition-all duration-300 ${
         isScrolled
-          ? "bg-white/95 backdrop-blur-md shadow-lg border-b border-[#102A66]/10"
+          ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-[#102A66]/10"
           : "bg-[#102A66]/90 backdrop-blur-sm border-b border-[#173B8F]/10"
       }`}
     >
       <nav className="container mx-auto h-[80px] pl-10 pr-4 flex items-center justify-between">
 
         {/* Logo */}
-<div className="flex items-center gap-3 h-full">
+        <div className="flex items-center gap-3 h-full">
 
-  {(
-    isScrolled
-      ? import.meta.env.VITE_APP_LOGO_DARK
-      : import.meta.env.VITE_APP_LOGO
-  ) &&
-  !(isScrolled
-    ? import.meta.env.VITE_APP_LOGO_DARK
-    : import.meta.env.VITE_APP_LOGO
-  ).startsWith("%") ? (
-    <img
-      src={
-        isScrolled
-          ? import.meta.env.VITE_APP_LOGO_DARK
-          : import.meta.env.VITE_APP_LOGO
-      }
-      alt="Logo"
-      className="h-8 w-auto object-contain transition-all duration-300"
+          {(
+            isScrolled
+              ? import.meta.env.VITE_APP_LOGO_DARK
+              : import.meta.env.VITE_APP_LOGO
+          ) &&
+          !(
+            isScrolled
+              ? import.meta.env.VITE_APP_LOGO_DARK
+              : import.meta.env.VITE_APP_LOGO
+          ).startsWith("%") ? (
+            <img
+              src={
+                isScrolled
+                  ? import.meta.env.VITE_APP_LOGO_DARK
+                  : import.meta.env.VITE_APP_LOGO
+              }
+              alt="Logo"
+              className="h-8 w-auto object-contain transition-all duration-300"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
 
@@ -102,13 +102,14 @@ export default function Header() {
             </div>
           )}
 
-         <span
-  className={`modira-font text-xl leading-none flex items-center translate-y-[2px] transition-colors duration-300 ${
-    isScrolled ? "text-[#102A66]" : "text-white"
-  }`}
->
-  MODIRA
-</span>
+          {/* Nombre de la marca */}
+          <span
+            className={`modira-font text-xl leading-none flex items-center translate-y-[2px] transition-colors duration-300 ${
+              isScrolled ? "text-[#102A66]" : "text-white"
+            }`}
+          >
+            MODIRA
+          </span>
         </div>
 
         {/* Desktop Navigation */}
@@ -116,7 +117,7 @@ export default function Header() {
 
           <button
             onClick={() => scrollToSection("servicios")}
-            className={`font-medium transition-colors duration-300 ${
+            className={`text-[14px] font-medium transition-colors duration-300 ${
               isScrolled
                 ? "text-[#102A66]/80 hover:text-[#102A66]"
                 : "text-white/80 hover:text-white"
@@ -127,7 +128,7 @@ export default function Header() {
 
           <button
             onClick={() => scrollToSection("faq")}
-            className={`font-medium transition-colors duration-300 ${
+            className={`text-[14px] font-medium transition-colors duration-300 ${
               isScrolled
                 ? "text-[#102A66]/80 hover:text-[#102A66]"
                 : "text-white/80 hover:text-white"
@@ -138,7 +139,7 @@ export default function Header() {
 
           <a
             href="/area-cliente"
-            className={`font-medium transition-colors duration-300 ${
+            className={`text-[14px] font-medium transition-colors duration-300 ${
               isScrolled
                 ? "text-[#102A66]/80 hover:text-[#102A66]"
                 : "text-white/80 hover:text-white"
@@ -149,7 +150,7 @@ export default function Header() {
 
           <Button
             onClick={() => scrollToSection("auditoria")}
-            className={`font-semibold transition-all duration-300 shadow-lg hover:shadow-xl ${
+            className={`text-[14px] font-medium px-5 py-2.5 rounded-lg transition-all duration-300 shadow-sm hover:shadow-md ${
               isScrolled
                 ? "bg-[#102A66] text-white hover:bg-[#173B8F]"
                 : "bg-white text-[#102A66] hover:bg-[#F4F6F9]"
@@ -182,7 +183,7 @@ export default function Header() {
         >
           <button
             onClick={() => scrollToSection("servicios")}
-            className={`block w-full text-left py-2 font-medium transition-colors ${
+            className={`block w-full text-left py-2 text-[15px] font-medium transition-colors ${
               isScrolled
                 ? "text-[#102A66]/80 hover:text-[#102A66]"
                 : "text-white/80 hover:text-white"
@@ -193,7 +194,7 @@ export default function Header() {
 
           <button
             onClick={() => scrollToSection("faq")}
-            className={`block w-full text-left py-2 font-medium transition-colors ${
+            className={`block w-full text-left py-2 text-[15px] font-medium transition-colors ${
               isScrolled
                 ? "text-[#102A66]/80 hover:text-[#102A66]"
                 : "text-white/80 hover:text-white"
@@ -204,7 +205,7 @@ export default function Header() {
 
           <a
             href="/area-cliente"
-            className={`block w-full text-left py-2 font-medium transition-colors ${
+            className={`block w-full text-left py-2 text-[15px] font-medium transition-colors ${
               isScrolled
                 ? "text-[#102A66]/80 hover:text-[#102A66]"
                 : "text-white/80 hover:text-white"
@@ -215,7 +216,7 @@ export default function Header() {
 
           <Button
             onClick={() => scrollToSection("auditoria")}
-            className={`w-full font-semibold transition-all duration-300 ${
+            className={`w-full text-[15px] font-medium transition-all duration-300 ${
               isScrolled
                 ? "bg-[#102A66] text-white hover:bg-[#173B8F]"
                 : "bg-white text-[#102A66] hover:bg-[#F4F6F9]"

@@ -8,6 +8,7 @@ import {
   Mail,
   Building2,
   Calendar,
+  Phone,
   Zap,
   FileText,
   CreditCard,
@@ -340,165 +341,232 @@ export default function ClientArea() {
         </section>
 
         {/* MI PERFIL */}
-        <section id="perfil" className="mb-16">
-          <div className="mb-7">
-            <h2 className="text-3xl font-bold text-[#102A66]">Mi Perfil</h2>
-            <p className="mt-2 text-[#52627A]">
-              Información personal y configuración de tu cuenta.
+<section id="perfil" className="mb-16">
+  <div className="mb-7 flex items-end justify-between gap-6">
+    <div>
+      <h2 className="text-3xl font-bold text-[#102A66]">
+        Mi Perfil
+      </h2>
+
+      <p className="mt-2 text-[#52627A]">
+        Información personal y configuración de tu cuenta.
+      </p>
+    </div>
+
+    {/* FECHA DE REGISTRO */}
+    {profile && (
+      <div className="hidden md:flex items-center gap-2 pb-1">
+        <Calendar className="h-4 w-4 text-[#173B8F]" />
+
+        <div>
+          <span className="text-sm font-semibold text-[#52627A]">
+            Fecha de registro
+          </span>
+
+          <span className="ml-2 text-sm font-semibold text-[#182230]">
+            {profile.fecha_registro
+              ? new Date(profile.fecha_registro).toLocaleDateString("es-ES")
+              : "-"}
+          </span>
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* FECHA DE REGISTRO EN MÓVIL */}
+  {profile && (
+    <div className="mb-5 flex items-center gap-2 md:hidden">
+      <Calendar className="h-4 w-4 text-[#173B8F]" />
+
+      <span className="text-sm font-semibold text-[#52627A]">
+        Fecha de registro:
+      </span>
+
+      <span className="text-sm font-semibold text-[#182230]">
+        {profile.fecha_registro
+          ? new Date(profile.fecha_registro).toLocaleDateString("es-ES")
+          : "-"}
+      </span>
+    </div>
+  )}
+
+  <Card className="border border-[#E8ECF2] bg-white p-8">
+    {profile ? (
+      <div className="space-y-8">
+
+        {/* NOMBRE + CORREO */}
+        <div className="grid gap-8 md:grid-cols-2">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <User className="h-4 w-4 text-[#173B8F]" />
+
+              <label className="text-sm font-semibold text-[#52627A]">
+                Nombre completo
+              </label>
+            </div>
+
+            <p className="text-lg font-semibold text-[#182230]">
+              {profile.nombre}
             </p>
           </div>
 
-          <Card className="border border-[#E8ECF2] bg-white p-8">
-            {profile ? (
-              <div className="space-y-8">
-                <div className="grid gap-8 md:grid-cols-2">
-                  <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <User className="h-4 w-4 text-[#173B8F]" />
-                      <label className="text-sm font-semibold text-[#52627A]">
-                        Nombre completo
-                      </label>
-                    </div>
-                    <p className="text-lg font-semibold text-[#182230]">
-                      {profile.nombre}
-                    </p>
-                  </div>
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Mail className="h-4 w-4 text-[#173B8F]" />
 
-                  <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-[#173B8F]" />
-                      <label className="text-sm font-semibold text-[#52627A]">
-                        Correo electrónico
-                      </label>
-                    </div>
-                    <p className="text-lg font-semibold text-[#182230]">
-                      {user.email}
-                    </p>
-                  </div>
-                </div>
+              <label className="text-sm font-semibold text-[#52627A]">
+                Correo electrónico
+              </label>
+            </div>
 
-                <div className="border-t border-[#E8ECF2]" />
+            <p className="text-lg font-semibold text-[#182230]">
+              {user.email}
+            </p>
+          </div>
+        </div>
 
-                <div className="grid gap-8 md:grid-cols-2">
-                  <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-[#173B8F]" />
-                      <label className="text-sm font-semibold text-[#52627A]">
-                        Empresa
-                      </label>
-                    </div>
-                    <p className="text-lg font-semibold text-[#182230]">
-                      {company?.company_name || profile.empresa || "No especificada"}
-                    </p>
-                  </div>
+        <div className="border-t border-[#E8ECF2]" />
 
-                  <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-[#173B8F]" />
-                      <label className="text-sm font-semibold text-[#52627A]">
-                        Fecha de registro
-                      </label>
-                    </div>
-                    <p className="text-lg font-semibold text-[#182230]">
-                      {profile.fecha_registro
-                        ? new Date(profile.fecha_registro).toLocaleDateString("es-ES")
-                        : "-"}
-                    </p>
-                  </div>
-                </div>
+        {/* EMPRESA + TELÉFONO */}
+        <div className="grid gap-8 md:grid-cols-2">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-[#173B8F]" />
 
-                <div className="border-t border-[#E8ECF2]" />
+              <label className="text-sm font-semibold text-[#52627A]">
+                Empresa
+              </label>
+            </div>
 
-                <Dialog
-                  open={isEditDialogOpen}
-                  onOpenChange={setIsEditDialogOpen}
-                >
-                  <DialogTrigger asChild>
-                    <Button className="bg-[#173B8F] text-white hover:bg-[#102A66]">
-                      <Edit2 className="mr-2 h-4 w-4" />
-                      Editar Perfil
-                    </Button>
-                  </DialogTrigger>
+            <p className="text-lg font-semibold text-[#182230]">
+  {profile.empresa?.trim()
+    ? profile.empresa
+    : "Sin definir"}
+</p>
+          </div>
 
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Editar Perfil</DialogTitle>
-                      <DialogDescription>
-                        Actualiza tu información personal y de contacto.
-                      </DialogDescription>
-                    </DialogHeader>
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Phone className="h-4 w-4 text-[#173B8F]" />
 
-                    <div className="grid gap-4 py-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="name">Nombre</Label>
-                        <Input
-                          id="name"
-                          value={editForm.nombre}
-                          onChange={(event) =>
-                            setEditForm({
-                              ...editForm,
-                              nombre: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
+              <label className="text-sm font-semibold text-[#52627A]">
+                Teléfono
+              </label>
+            </div>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="company">Empresa</Label>
-                        <Input
-                          id="company"
-                          value={editForm.empresa}
-                          onChange={(event) =>
-                            setEditForm({
-                              ...editForm,
-                              empresa: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
+            <p className="text-lg font-semibold text-[#182230]">
+              {profile.telefono?.trim()
+                ? profile.telefono
+                : "Sin definir"}
+            </p>
+          </div>
+        </div>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="phone">Teléfono</Label>
-                        <Input
-                          id="phone"
-                          value={editForm.telefono}
-                          onChange={(event) =>
-                            setEditForm({
-                              ...editForm,
-                              telefono: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
+        <div className="border-t border-[#E8ECF2]" />
 
-                    <DialogFooter>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setIsEditDialogOpen(false)}
-                      >
-                        Cancelar
-                      </Button>
+        {/* EDITAR PERFIL */}
+        <Dialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+        >
+          <DialogTrigger asChild>
+            <Button className="bg-[#173B8F] text-white hover:bg-[#102A66]">
+              <Edit2 className="mr-2 h-4 w-4" />
+              Editar Perfil
+            </Button>
+          </DialogTrigger>
 
-                      <Button
-                        type="button"
-                        className="bg-[#173B8F] text-white hover:bg-[#102A66]"
-                        onClick={handleUpdateProfile}
-                      >
-                        Guardar Cambios
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Perfil</DialogTitle>
+
+              <DialogDescription>
+                Actualiza tu información personal y de contacto.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+
+              <div className="grid gap-2">
+                <Label htmlFor="name">
+                  Nombre
+                </Label>
+
+                <Input
+                  id="name"
+                  value={editForm.nombre}
+                  onChange={(event) =>
+                    setEditForm({
+                      ...editForm,
+                      nombre: event.target.value,
+                    })
+                  }
+                />
               </div>
-            ) : (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-[#173B8F]" />
+
+              <div className="grid gap-2">
+                <Label htmlFor="company">
+                  Empresa
+                </Label>
+
+                <Input
+                  id="company"
+                  value={editForm.empresa}
+                  onChange={(event) =>
+                    setEditForm({
+                      ...editForm,
+                      empresa: event.target.value,
+                    })
+                  }
+                />
               </div>
-            )}
-          </Card>
-        </section>
+
+              <div className="grid gap-2">
+                <Label htmlFor="phone">
+                  Teléfono
+                </Label>
+
+                <Input
+                  id="phone"
+                  value={editForm.telefono}
+                  onChange={(event) =>
+                    setEditForm({
+                      ...editForm,
+                      telefono: event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                type="button"
+                className="bg-[#173B8F] text-white hover:bg-[#102A66]"
+                onClick={handleUpdateProfile}
+              >
+                Guardar Cambios
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    ) : (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-[#173B8F]" />
+      </div>
+    )}
+  </Card>
+</section>
 
         {/* ACCESOS DETALLADOS
         <section className="space-y-10">

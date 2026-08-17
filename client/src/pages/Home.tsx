@@ -22,9 +22,476 @@ import {
   CheckCircle2,
   Lightbulb,
   Wrench,
+  Workflow,
+  Cloud,
+  Database,
+  MessageCircle,
+  CalendarDays,
+  Webhook,
+  Network,
+  ShieldCheck,
+  Target,
+  Users,
+  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+
+function IntegrationFlow() {
+  const leftIntegrations = [
+    {
+      name: "Make",
+      description: "Automatización visual",
+      icon: Workflow,
+      color: "#9333EA",
+      side: "left",
+    },
+    {
+      name: "n8n",
+      description: "Workflows avanzados",
+      icon: Network,
+      color: "#F43F5E",
+      side: "left",
+    },
+    {
+      name: "APIs & Webhooks",
+      description: "Conecta servicios externos",
+      icon: Webhook,
+      color: "#2563EB",
+      side: "left",
+    },
+  ];
+
+  const rightIntegrations = [
+    {
+      name: "Google Workspace",
+      description: "Docs, Sheets, Gmail y más",
+      icon: Cloud,
+      color: "#4285F4",
+      side: "right",
+    },
+    {
+      name: "Airtable",
+      description: "Bases de datos flexibles",
+      icon: Database,
+      color: "#F59E0B",
+      side: "right",
+    },
+    {
+      name: "WhatsApp Business",
+      description: "Mensajería y atención",
+      icon: MessageCircle,
+      color: "#22C55E",
+      side: "right",
+    },
+  ];
+
+  const benefits = [
+    {
+      icon: TrendingUp,
+      title: "Más eficiencia",
+      description: "Automatiza tareas repetitivas",
+    },
+    {
+      icon: Target,
+      title: "Mayor precisión",
+      description: "Reduce errores manuales",
+    },
+    {
+      icon: Users,
+      title: "Mejor colaboración",
+      description: "Conecta equipos y herramientas",
+    },
+    {
+      icon: Activity,
+      title: "Información en tiempo real",
+      description: "Datos siempre actualizados",
+    },
+    {
+      icon: ShieldCheck,
+      title: "Seguro y escalable",
+      description: "Preparado para crecer contigo",
+    },
+  ];
+
+  return (
+    <section className="relative mt-16 overflow-hidden rounded-3xl border border-[#E8ECF2] bg-gradient-to-br from-[#F8FAFF] via-white to-[#F4F7FC] px-5 py-14 md:px-8 md:py-16">
+
+      {/* Background decorative elements */}
+      <div className="pointer-events-none absolute -left-32 top-20 h-72 w-72 rounded-full bg-[#173B8F]/5 blur-3xl" />
+      <div className="pointer-events-none absolute -right-32 bottom-10 h-72 w-72 rounded-full bg-[#2854B8]/5 blur-3xl" />
+
+      {/* Header */}
+      <div className="relative z-10 mx-auto mb-14 max-w-3xl text-center">
+        <h3 className="text-3xl font-bold tracking-tight text-[#102A66] md:text-4xl">
+          Sistemas conectados. Procesos automatizados.
+          <br className="hidden md:block" />
+          <span className="text-[#173B8F]"> Un negocio que trabaja mejor.</span>
+        </h3>
+
+        <p className="mt-4 text-base text-[#52627A] md:text-lg">
+          Todas tus herramientas trabajando juntas de forma inteligente
+        </p>
+      </div>
+
+      {/* Main integration diagram */}
+<div className="relative z-10 mx-auto max-w-6xl">
+
+  {/* DESKTOP */}
+  <div className="relative hidden h-[430px] md:block">
+
+    {/* ========================= */}
+    {/* CONEXIONES */}
+    {/* ========================= */}
+
+    <svg
+      className="pointer-events-none absolute left-0 top-0 z-0 h-full w-full"
+      viewBox="0 0 1200 430"
+      preserveAspectRatio="none"
+      fill="none"
+    >
+
+      {/* Make → Modira */}
+      <path
+        d="M300 70 C400 70 445 120 505 155"
+        stroke="#2563EB"
+        strokeWidth="2"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+
+      {/* n8n → Modira */}
+      <path
+        d="M300 215 C390 215 440 215 505 215"
+        stroke="#2563EB"
+        strokeWidth="2"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+
+      {/* APIs → Modira */}
+      <path
+        d="M300 360 C400 360 445 310 505 275"
+        stroke="#2563EB"
+        strokeWidth="2"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+
+      {/* Modira → Google */}
+      <path
+        d="M695 155 C755 120 800 70 900 70"
+        stroke="#2563EB"
+        strokeWidth="2"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+
+      {/* Modira → Airtable */}
+      <path
+        d="M695 215 C760 215 810 215 900 215"
+        stroke="#2563EB"
+        strokeWidth="2"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+
+      {/* Modira → WhatsApp */}
+      <path
+        d="M695 275 C755 310 800 360 900 360"
+        stroke="#2563EB"
+        strokeWidth="2"
+        strokeDasharray="7 7"
+        strokeLinecap="round"
+      />
+    </svg>
+
+
+    {/* ========================= */}
+    {/* COLUMNA IZQUIERDA */}
+    {/* ========================= */}
+
+    <div className="absolute left-0 top-[15px] w-[300px]">
+      <div className="flex h-[110px] items-center rounded-2xl border border-[#E8ECF2] bg-white px-6 shadow-sm">
+        <div className="mr-4 flex h-14 w-14 items-center justify-center rounded-xl bg-purple-50">
+          <Workflow className="h-7 w-7 text-purple-600" />
+        </div>
+
+        <div>
+          <h4 className="text-lg font-bold text-[#102A66]">
+            Make
+          </h4>
+          <p className="text-sm text-[#52627A]">
+            Automatización visual
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+    <div className="absolute left-0 top-[160px] w-[300px]">
+      <div className="flex h-[110px] items-center rounded-2xl border border-[#E8ECF2] bg-white px-6 shadow-sm">
+        <div className="mr-4 flex h-14 w-14 items-center justify-center rounded-xl bg-rose-50">
+          <Network className="h-7 w-7 text-rose-500" />
+        </div>
+
+        <div>
+          <h4 className="text-lg font-bold text-[#102A66]">
+            n8n
+          </h4>
+          <p className="text-sm text-[#52627A]">
+            Workflows avanzados
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+    <div className="absolute left-0 top-[305px] w-[300px]">
+      <div className="flex h-[110px] items-center rounded-2xl border border-[#E8ECF2] bg-white px-6 shadow-sm">
+        <div className="mr-4 flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50">
+          <Webhook className="h-7 w-7 text-blue-600" />
+        </div>
+
+        <div>
+          <h4 className="text-lg font-bold text-[#102A66]">
+            APIs & Webhooks
+          </h4>
+          <p className="text-sm text-[#52627A]">
+            Conecta servicios externos
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+    {/* ========================= */}
+    {/* COLUMNA DERECHA */}
+    {/* ========================= */}
+
+    <div className="absolute right-0 top-[15px] w-[300px]">
+      <div className="flex h-[110px] items-center rounded-2xl border border-[#E8ECF2] bg-white px-6 shadow-sm">
+        <div className="mr-4 flex h-14 w-14 items-center justify-center rounded-xl bg-blue-50">
+          <Cloud className="h-7 w-7 text-blue-500" />
+        </div>
+
+        <div>
+          <h4 className="text-lg font-bold text-[#102A66]">
+            Google Workspace
+          </h4>
+          <p className="text-sm text-[#52627A]">
+            Docs, Sheets, Gmail y más
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+    <div className="absolute right-0 top-[160px] w-[300px]">
+      <div className="flex h-[110px] items-center rounded-2xl border border-[#E8ECF2] bg-white px-6 shadow-sm">
+        <div className="mr-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-50">
+          <Database className="h-7 w-7 text-orange-500" />
+        </div>
+
+        <div>
+          <h4 className="text-lg font-bold text-[#102A66]">
+            Airtable
+          </h4>
+          <p className="text-sm text-[#52627A]">
+            Bases de datos flexibles
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+    <div className="absolute right-0 top-[305px] w-[300px]">
+      <div className="flex h-[110px] items-center rounded-2xl border border-[#E8ECF2] bg-white px-6 shadow-sm">
+        <div className="mr-4 flex h-14 w-14 items-center justify-center rounded-xl bg-green-50">
+          <MessageCircle className="h-7 w-7 text-green-500" />
+        </div>
+
+        <div>
+          <h4 className="text-lg font-bold text-[#102A66]">
+            WhatsApp Business
+          </h4>
+          <p className="text-sm text-[#52627A]">
+            Mensajería y atención
+          </p>
+        </div>
+      </div>
+    </div>
+
+
+    {/* ========================= */}
+    {/* CENTRAL AUTOMATION HUB */}
+    {/* ========================= */}
+
+    <div className="absolute left-1/2 top-0 -translate-x-1/2">
+      <div className="rounded-2xl border border-[#D9E2F5] bg-white px-8 py-4 text-center shadow-md">
+        <h4 className="text-lg font-bold text-[#173B8F]">
+          Central Automation Hub
+        </h4>
+
+        <p className="mt-1 text-sm text-[#52627A]">
+          Conecta • Automatiza • Integra
+        </p>
+      </div>
+    </div>
+
+
+    {/* ========================= */}
+    {/* MODIRA */}
+    {/* ========================= */}
+
+    <div className="absolute left-1/2 top-[120px] -translate-x-1/2">
+
+      <div className="relative flex h-[150px] w-[150px] items-center justify-center rounded-full border-[10px] border-white bg-[#173B8F] shadow-xl">
+
+        <div className="absolute inset-[10px] rounded-full border border-white/20" />
+
+        <div className="relative text-center text-white">
+          <Zap className="mx-auto mb-1 h-12 w-12 fill-white" />
+
+          <p className="text-base font-bold tracking-[0.25em]">
+            MODIRA
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+
+
+    {/* ========================= */}
+    {/* DATA FLOW */}
+    {/* ========================= */}
+
+    <div className="absolute left-1/2 top-[295px] -translate-x-1/2">
+      <div className="flex w-[300px] items-center justify-between rounded-2xl border border-[#E8ECF2] bg-white px-6 py-4 shadow-sm">
+
+        <ArrowRight className="h-5 w-5 rotate-180 text-[#173B8F]" />
+
+        <div className="text-center">
+          <p className="font-bold text-[#173B8F]">
+            Data Flow
+          </p>
+
+          <p className="text-xs text-[#52627A]">
+            Seguro • Fiable • Tiempo real
+          </p>
+        </div>
+
+        <ArrowRight className="h-5 w-5 text-[#173B8F]" />
+
+      </div>
+    </div>
+
+  </div>
+
+
+  {/* ========================= */}
+  {/* MOBILE */}
+  {/* ========================= */}
+
+  <div className="space-y-4 md:hidden">
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-white p-5 shadow-sm">
+      <p className="font-bold text-[#102A66]">Make</p>
+      <p className="text-sm text-[#52627A]">
+        Automatización visual
+      </p>
+    </div>
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-white p-5 shadow-sm">
+      <p className="font-bold text-[#102A66]">n8n</p>
+      <p className="text-sm text-[#52627A]">
+        Workflows avanzados
+      </p>
+    </div>
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-white p-5 shadow-sm">
+      <p className="font-bold text-[#102A66]">
+        APIs & Webhooks
+      </p>
+      <p className="text-sm text-[#52627A]">
+        Conecta servicios externos
+      </p>
+    </div>
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-[#173B8F] p-8 text-center text-white">
+      <Zap className="mx-auto mb-2 h-12 w-12" />
+
+      <p className="font-bold tracking-[0.25em]">
+        MODIRA
+      </p>
+    </div>
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-white p-5 shadow-sm">
+      <p className="font-bold text-[#102A66]">
+        Google Workspace
+      </p>
+      <p className="text-sm text-[#52627A]">
+        Docs, Sheets, Gmail y más
+      </p>
+    </div>
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-white p-5 shadow-sm">
+      <p className="font-bold text-[#102A66]">
+        Airtable
+      </p>
+      <p className="text-sm text-[#52627A]">
+        Bases de datos flexibles
+      </p>
+    </div>
+
+    <div className="rounded-2xl border border-[#E8ECF2] bg-white p-5 shadow-sm">
+      <p className="font-bold text-[#102A66]">
+        WhatsApp Business
+      </p>
+      <p className="text-sm text-[#52627A]">
+        Mensajería y atención
+      </p>
+    </div>
+
+  </div>
+
+</div>
+        {/* Benefits */}
+        <div className="relative z-10 mt-14 grid gap-4 border-t border-dashed border-[#BFCBE0] pt-8 sm:grid-cols-2 lg:grid-cols-5">
+          {benefits.map((benefit) => {
+            const Icon = benefit.icon;
+
+            return (
+              <div
+                key={benefit.title}
+                className="group rounded-xl border border-[#E8ECF2] bg-white/80 p-5 text-center transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-md"
+              >
+                <Icon className="mx-auto mb-3 h-8 w-8 text-[#173B8F] transition-transform duration-300 group-hover:scale-110" />
+
+                <h4 className="text-sm font-bold text-[#102A66]">
+                  {benefit.title}
+                </h4>
+
+                <p className="mt-1 text-xs text-[#52627A]">
+                  {benefit.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      
+
+      {/* Mobile explanation */}
+      <div className="relative z-10 mt-8 text-center md:hidden">
+        <p className="text-sm text-[#52627A]">
+          Modira conecta tus herramientas y automatiza el flujo de información
+          entre ellas.
+        </p>
+      </div>
+    </section>
+  );
+}
 
 export default function Home() {
   const [formData, setFormData] = useState({
@@ -111,6 +578,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
   const yearlySavings = monthlySavings * 12;
   const monthlyCost = weeklySavings * savingsData.hourlyRate * 4;
 
+
   return (
     <div className="min-h-screen bg-white">
       <Header />
@@ -123,11 +591,13 @@ const handleFormSubmit = async (e: React.FormEvent) => {
 
         <div className="container mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 xl:px-16 relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight">
-                Automatiza tu empresa, libera tu equipo
-              </h1>
-              <p className="text-lg md:text-xl text-white/85 leading-relaxed">
+            <div className="space-y-7">
+             <h1 className="text-[10px] md:text-[10px] lg:text-[54px] font-bold text-white leading-[1.05] tracking-[0em]">
+  Automatiza tu empresa,
+  <br />
+  libera tu equipo
+</h1>
+              <p className="text-[18px] md:text-[20px] text-white/85 leading-[1.5]">
                 Recupera entre 10 y 30 horas semanales automatizando procesos
                 repetitivos. Modira conecta tus herramientas y crea flujos
                 inteligentes adaptados a tu negocio.
@@ -174,6 +644,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
         </div>
       </section>
 
+
       {/* Statistics Section - Premium Cards */}
       <section className="py-16 md:py-24 bg-[#F4F6F9]">
         <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
@@ -187,7 +658,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
               },
               {
                 label: "Potencial",
-                value: "10–30 h",
+                value: "10-30 h",
                 description: "Ahorro semanal por proceso",
                 icon: Clock,
               },
@@ -206,14 +677,14 @@ const handleFormSubmit = async (e: React.FormEvent) => {
             ].map((stat, idx) => (
               <Card
                 key={idx}
-                className="p-6 md:p-8 border border-[#E8ECF2] bg-white hover:shadow-lg transition-all duration-300"
+                className="p-4 md:p-5 border border-[#E8ECF2] bg-white hover:shadow-lg transition-all duration-300"
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-sm font-semibold text-[#52627A] mb-1">
                       {stat.label}
                     </p>
-                    <p className="text-3xl md:text-4xl font-bold text-[#173B8F]">
+                    <p className="text-3xl md:text-4xl font-bold text-[#173B8F] mt-3">
                       {stat.value}
                     </p>
                   </div>
@@ -225,6 +696,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
       </section>
+
 
       {/* Problema Section - Enhanced */}
       <section className="py-16 md:py-24 bg-white">
@@ -238,7 +710,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
               />
             </div>
             <div className="space-y-6 order-1 md:order-2">
-              <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] leading-tight">
+              <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] leading-tight">
                 El problema que enfrentas
               </h2>
               <p className="text-lg text-[#52627A]">
@@ -267,11 +739,12 @@ const handleFormSubmit = async (e: React.FormEvent) => {
         </div>
       </section>
 
+
       {/* Solución Section - Enhanced */}
-      <section className="py-16 md:py-24 bg-[#F4F6F9]">
-        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
+        <section className="pt-16 md:pt-24 pb-4 md:pb-8 bg-[#F4F6F9]">
+          <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4 leading-tight">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-4 leading-tight">
               La solución: Automatización inteligente
             </h2>
             <p className="text-lg text-[#52627A] max-w-2xl mx-auto">
@@ -315,84 +788,14 @@ const handleFormSubmit = async (e: React.FormEvent) => {
           </div>
 
           {/* Integration Ecosystem */}
-          <div className="relative rounded-2xl overflow-hidden">
-            <img
-              src="/Images/integration-ecosystem.png"
-              alt="Ecosistema de integraciones"
-              className="w-full h-auto rounded-2xl shadow-lg"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Cómo trabajamos Section */}
-      <HowWeWork />
-
-      {/* Before/After Section */}
-      <section className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4">
-              De procesos manuales a sistemas que trabajan por ti
-            </h2>
-            <p className="text-lg text-[#52627A] max-w-2xl mx-auto">
-              Visualiza la transformación que Modira proporciona a tu empresa
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Before */}
-            <Card className="p-8 border-2 border-red-200 bg-red-50">
-              <h3 className="text-2xl font-bold text-red-700 mb-6 flex items-center gap-2">
-                <AlertCircle className="h-6 w-6" />
-                Antes
-              </h3>
-              <ul className="space-y-3">
-                {[
-                  "Introducir datos manualmente",
-                  "Copiar información entre herramientas",
-                  "Enviar emails manualmente",
-                  "Revisar tareas repetitivas",
-                  "Errores humanos frecuentes",
-                ].map((item, idx) => (
-                  <li key={idx} className="flex gap-3 items-start">
-                    <span className="text-red-600 font-bold">✕</span>
-                    <span className="text-red-900">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-
-            {/* After */}
-            <Card className="p-8 border-2 border-green-200 bg-green-50">
-              <h3 className="text-2xl font-bold text-green-700 mb-6 flex items-center gap-2">
-                <CheckCircle2 className="h-6 w-6" />
-                Después
-              </h3>
-              <ul className="space-y-3">
-                {[
-                  "Datos sincronizados automáticamente",
-                  "Herramientas conectadas",
-                  "Respuestas automáticas",
-                  "Flujos funcionando 24/7",
-                  "Menos errores",
-                ].map((item, idx) => (
-                  <li key={idx} className="flex gap-3 items-start">
-                    <span className="text-green-600 font-bold">✓</span>
-                    <span className="text-green-900">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </div>
-        </div>
-      </section>
+</div>
+</section>
 
       {/* ROI Calculator Section */}
-      <section className="py-16 md:py-24 bg-[#F4F6F9]">
+      <section className="pt-4 md:pt-8 pb-16 md:pb-24 bg-[#F4F6F9]">
         <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-4">
               ¿Cuánto podrías ahorrar?
             </h2>
             <p className="text-lg text-[#52627A]">
@@ -502,11 +905,82 @@ const handleFormSubmit = async (e: React.FormEvent) => {
         </div>
       </section>
 
-      {/* Servicios Section */}
-      <section id="servicios" className="py-16 md:py-24 bg-white">
+
+      {/* Cómo trabajamos Section */}
+      <div className="-mt-12 md:-mt-16">
+  <HowWeWork />
+</div>
+
+
+      <IntegrationFlow />
+
+
+      {/* Before/After Section */}
+      <section className="py-16 md:py-24 bg-white">
         <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
           <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-4">
+              De procesos manuales a sistemas que trabajan por ti
+            </h2>
+            <p className="text-lg text-[#52627A] max-w-2xl mx-auto">
+              Visualiza la transformación que Modira proporciona a tu empresa
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Before */}
+            <Card className="p-8 border-2 border-red-200 bg-red-50">
+              <h3 className="text-2xl font-bold text-red-700 mb-6 flex items-center gap-2">
+                <AlertCircle className="h-6 w-6" />
+                Antes
+              </h3>
+              <ul className="space-y-3">
+                {[
+                  "Introducir datos manualmente",
+                  "Copiar información entre herramientas",
+                  "Enviar emails manualmente",
+                  "Revisar tareas repetitivas",
+                  "Errores humanos frecuentes",
+                ].map((item, idx) => (
+                  <li key={idx} className="flex gap-3 items-start">
+                    <span className="text-red-600 font-bold">✕</span>
+                    <span className="text-red-900">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+
+            {/* After */}
+            <Card className="p-8 border-2 border-green-200 bg-green-50">
+              <h3 className="text-2xl font-bold text-green-700 mb-6 flex items-center gap-2">
+                <CheckCircle2 className="h-6 w-6" />
+                Después
+              </h3>
+              <ul className="space-y-3">
+                {[
+                  "Datos sincronizados automáticamente",
+                  "Herramientas conectadas",
+                  "Respuestas automáticas",
+                  "Flujos funcionando 24/7",
+                  "Menos errores",
+                ].map((item, idx) => (
+                  <li key={idx} className="flex gap-3 items-start">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-900">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Servicios Section */}
+      <section id="servicios" className="py-16 md:py-24 bg-[#F4F6F9]">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-4">
               Nuestros servicios
             </h2>
             <p className="text-lg text-[#52627A] max-w-2xl mx-auto">
@@ -601,10 +1075,70 @@ const handleFormSubmit = async (e: React.FormEvent) => {
         </div>
       </section>
 
+
+      {/* Casos de Éxito Section */}
+      <section id="casos-exito" className="py-16 md:py-24 bg-white">
+        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
+        <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-4 text-center">
+              Ejemplos de transformación
+          </h2>
+          <p className="text-lg text-[#52627A] max-w-2xl mx-auto text-center mb-12">
+            Casos de uso reales que muestran el potencial de la automatización
+          </p>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                name: "Automatización comercial",
+                role: "Ejemplo: Empresa de servicios",
+                quote:
+                  "Captación → CRM → seguimiento → email. Un flujo completo que convierte leads en clientes sin intervención manual.",
+                metrics: "25h/semana ahorradas",
+              },
+              {
+                name: "Automatización administrativa",
+                role: "Ejemplo: Consultoría",
+                quote:
+                  "Formulario → datos → documento → notificación. Los procesos administrativos se resuelven automáticamente.",
+                metrics: "95% menos errores",
+              },
+              {
+                name: "Atención al cliente",
+                role: "Ejemplo: E-commerce",
+                quote:
+                  "Cliente → WhatsApp → IA → respuesta. Respuestas automáticas inteligentes 24/7.",
+                metrics: "0 contrataciones",
+              },
+            ].map((example, idx) => (
+              <Card key={idx} className="p-8 border-[#E8ECF2] hover:shadow-lg transition-all">
+                <div className="flex gap-1 mb-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className="h-5 w-5 fill-yellow-400 text-yellow-400"
+                    />
+                  ))}
+                </div>
+                <p className="text-[#182230] mb-6 italic">\"{example.quote}\"</p>
+                <div className="border-t border-[#E8ECF2] pt-4">
+                  <p className="font-bold text-[#102A66]">{example.name}</p>
+                  <p className="text-sm text-[#52627A]">{example.role}</p>
+                  <p className="text-sm font-semibold text-[#173B8F] mt-2">
+                    {example.metrics}
+                  </p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+
+
       {/* Mantenimiento Section */}
       <section className="py-16 md:py-24 bg-[#F4F6F9]">
         <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-12 text-center">
             Planes de mantenimiento
           </h2>
 
@@ -690,10 +1224,11 @@ const handleFormSubmit = async (e: React.FormEvent) => {
         </div>
       </section>
 
+
  {/* Por qué elegir Modira Section */}
       <section className="py-16 md:py-24 bg-white">
         <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-12 text-center">
             Por qué elegir Modira
           </h2>
 
@@ -745,68 +1280,11 @@ const handleFormSubmit = async (e: React.FormEvent) => {
 
 
 
-      {/* Casos de Éxito Section */}
-      <section id="casos-exito" className="py-16 md:py-24 bg-white">
-        <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-4 text-center">
-            Ejemplos de transformación
-          </h2>
-          <p className="text-lg text-[#52627A] max-w-2xl mx-auto text-center mb-12">
-            Casos de uso reales que muestran el potencial de la automatización
-          </p>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                name: "Automatización comercial",
-                role: "Ejemplo: Empresa de servicios",
-                quote:
-                  "Captación → CRM → seguimiento → email. Un flujo completo que convierte leads en clientes sin intervención manual.",
-                metrics: "25h/semana ahorradas",
-              },
-              {
-                name: "Automatización administrativa",
-                role: "Ejemplo: Consultoría",
-                quote:
-                  "Formulario → datos → documento → notificación. Los procesos administrativos se resuelven automáticamente.",
-                metrics: "95% menos errores",
-              },
-              {
-                name: "Atención al cliente",
-                role: "Ejemplo: E-commerce",
-                quote:
-                  "Cliente → WhatsApp → IA → respuesta. Respuestas automáticas inteligentes 24/7.",
-                metrics: "0 contrataciones",
-              },
-            ].map((example, idx) => (
-              <Card key={idx} className="p-8 border-[#E8ECF2] hover:shadow-lg transition-all">
-                <div className="flex gap-1 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className="h-5 w-5 fill-yellow-400 text-yellow-400"
-                    />
-                  ))}
-                </div>
-                <p className="text-[#182230] mb-6 italic">\"{example.quote}\"</p>
-                <div className="border-t border-[#E8ECF2] pt-4">
-                  <p className="font-bold text-[#102A66]">{example.name}</p>
-                  <p className="text-sm text-[#52627A]">{example.role}</p>
-                  <p className="text-sm font-semibold text-[#173B8F] mt-2">
-                    {example.metrics}
-                  </p>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
 
       {/* FAQ Section */}
       <section id="faq" className="py-16 md:py-24 bg-[#F4F6F9]">
         <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
-          <h2 className="text-4xl md:text-5xl font-bold text-[#102A66] mb-12 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-[#102A66] mb-12 text-center">
             Preguntas frecuentes
           </h2>
 
@@ -863,6 +1341,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
       </section>
+
 
       {/* Auditoría CTA Section */}
       <section id="auditoria" className="py-16 md:py-24 bg-gradient-to-br from-[#102A66] to-[#173B8F]">
@@ -976,97 +1455,134 @@ const handleFormSubmit = async (e: React.FormEvent) => {
 
       
 
+
       {/* Footer */}
-      <footer className="bg-[#102A66] text-white py-12">
-        <div className="container-lg mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="bg-white/10 p-1.5 rounded-lg">
-                  <Zap className="h-5 w-5 text-white" />
-                </div>
-                <span className="text-xl font-bold">Modira</span>
-              </div>
-              <p className="text-white/70 text-sm mb-4">
-                Automatización inteligente para empresas.
-              </p>
-              <p className="text-white/60 text-xs">
-                <strong>Email:</strong> modira.information@gmail.com
-              </p>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4">Producto</h4>
-              <ul className="space-y-2 text-white/70 text-sm">
-                <li>
-                  <a href="#servicios" className="hover:text-white transition">
-                    Servicios
-                  </a>
-                </li>
-                <li>
-                  <a href="#faq" className="hover:text-white transition">
-                    FAQ
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4">Empresa</h4>
-              <ul className="space-y-2 text-white/70 text-sm">
-                <li>
-                  <a href="/area-cliente" className="hover:text-white transition">
-                    Área de Clientes
-                  </a>
-                </li>
-                <li>
-                  <a href="/empleados/login" className="hover:text-white transition">
-                    Área de Empleados
-                  </a>
-                </li>
-                <li>
-                  <a href="#auditoria" className="hover:text-white transition">
-                    Contacto
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4">Legal</h4>
-              <ul className="space-y-2 text-white/70 text-sm">
-                <li>
-                  <a href="/politica-privacidad" className="hover:text-white transition">
-                    Privacidad
-                  </a>
-                </li>
-                <li>
-                  <a href="/terminos" className="hover:text-white transition">
-                    Términos
-                  </a>
-                </li>
-                <li>
-                  <a href="/politica-cookies" className="hover:text-white transition">
-                    Cookies
-                  </a>
-                </li>
-              </ul>
-            </div>
+<footer className="bg-[#102A66] text-white py-12">
+  <div className="container-lg mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
+    <div className="grid md:grid-cols-4 gap-8 mb-8">
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="bg-white/10 p-1.5 rounded-lg">
+            <Zap className="h-5 w-5 text-white" />
           </div>
-          <div className="border-t border-white/10 pt-8">
-            <div className="grid md:grid-cols-2 gap-8 mb-4">
-              <div className="text-white/70 text-xs">
-                <p><strong>Modira</strong></p>
-                <p>Servicios de automatización empresarial</p>
-                <p className="mt-2">Email: modira.information@gmail.com</p>
-              </div>
-              <div className="text-white/70 text-xs text-right md:text-left">
-                <p>© {new Date().getFullYear()} Modira. Todos los derechos reservados.</p>
-                <p className="mt-2">Cumplimos con RGPD, LOPDGDD y LSSI-CE</p>
-              </div>
-            </div>
-          </div>
+          <span className="text-xl font-bold">Modira</span>
         </div>
-      </footer>
-      {/* Chatbot flotante */}
-      <AIChatBot />
+
+        <p className="text-white/70 text-sm mb-4">
+          Automatización inteligente para empresas.
+        </p>
+
+        <p className="text-white/60 text-xs">
+          <strong>Email:</strong> modira.information@gmail.com
+        </p>
+      </div>
+
+      <div>
+        <h4 className="font-bold mb-4">Producto</h4>
+        <ul className="space-y-2 text-white/70 text-sm">
+          <li>
+            <a href="#servicios" className="hover:text-white transition">
+              Servicios
+            </a>
+          </li>
+          <li>
+            <a href="#faq" className="hover:text-white transition">
+              FAQ
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 className="font-bold mb-4">Empresa</h4>
+        <ul className="space-y-2 text-white/70 text-sm">
+          <li>
+            <a
+              href="/area-cliente"
+              className="hover:text-white transition"
+            >
+              Área de Clientes
+            </a>
+          </li>
+
+          <li>
+            <a
+              href="/empleados/login"
+              className="hover:text-white transition"
+            >
+              Área de Empleados
+            </a>
+          </li>
+
+          <li>
+            <a href="#auditoria" className="hover:text-white transition">
+              Contacto
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 className="font-bold mb-4">Legal</h4>
+        <ul className="space-y-2 text-white/70 text-sm">
+          <li>
+            <a
+              href="/politica-privacidad"
+              className="hover:text-white transition"
+            >
+              Privacidad
+            </a>
+          </li>
+
+          <li>
+            <a
+              href="/terminos"
+              className="hover:text-white transition"
+            >
+              Términos
+            </a>
+          </li>
+
+          <li>
+            <a
+              href="/politica-cookies"
+              className="hover:text-white transition"
+            >
+              Cookies
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div className="border-t border-white/10 pt-8">
+      <div className="grid md:grid-cols-2 gap-8 mb-4">
+        <div className="text-white/70 text-xs">
+          <p>
+            <strong>Modira</strong>
+          </p>
+          <p>Servicios de automatización empresarial</p>
+          <p className="mt-2">
+            Email: modira.information@gmail.com
+          </p>
+        </div>
+
+        <div className="text-white/70 text-xs text-right md:text-left">
+          <p>
+            © {new Date().getFullYear()} Modira. Todos los derechos reservados.
+          </p>
+
+          <p className="mt-2">
+            Cumplimos con RGPD, LOPDGDD y LSSI-CE
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+{/* Chatbot flotante */}
+<AIChatBot />
     </div>
   );
 }

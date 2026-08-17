@@ -57,30 +57,31 @@ export default function ClientAreaHeader({
           : "bg-gradient-to-r from-[#102A66] to-[#173B8F] shadow-lg"
       }`}
     >
-      <nav className="container mx-auto h-full pl-10 pr-4 flex items-center justify-between">
+      <nav className="container mx-auto h-[80px] pl-10 pr-4 flex items-center justify-between">
 
-        {/* LOGO */}
-<div className="flex items-center gap-3 shrink-0 h-full">
-  <img
-    src={
-      isScrolled
-        ? import.meta.env.VITE_APP_LOGO_DARK
-        : import.meta.env.VITE_APP_LOGO
-    }
-    alt="Modira"
-    className="h-8 w-auto object-contain"
-  />
+        {/* Logo */}
+        <div className="flex items-center gap-3 h-full">
 
-  <span
-  className={`modira-font text-xl leading-none flex items-center translate-y-[2px] transition-colors duration-300 ${
-    isScrolled ? "text-[#102A66]" : "text-white"
-  }`}
->
-  MODIRA
-</span>
-</div>
+          <img
+            src={
+              isScrolled
+                ? import.meta.env.VITE_APP_LOGO_DARK
+                : import.meta.env.VITE_APP_LOGO
+            }
+            alt="Modira"
+            className="h-8 w-auto object-contain transition-all duration-300"
+          />
 
-        {/* DESKTOP NAVIGATION */}
+          <span
+            className={`modira-font text-xl leading-none flex items-center translate-y-[2px] transition-colors duration-300 ${
+              isScrolled ? "text-[#102A66]" : "text-white"
+            }`}
+          >
+            MODIRA
+          </span>
+        </div>
+
+        {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-6">
 
           <nav className="flex items-center gap-6">
@@ -88,7 +89,7 @@ export default function ClientAreaHeader({
               <button
                 key={item.label}
                 onClick={() => handleNavigation(item.path)}
-                className={`font-medium text-sm transition-colors duration-300 ${
+                className={`text-[14px] font-medium transition-colors duration-300 ${
                   isScrolled
                     ? "text-[#102A66]/80 hover:text-[#102A66]"
                     : "text-white/80 hover:text-white"
@@ -101,7 +102,7 @@ export default function ClientAreaHeader({
 
           <Button
             onClick={onLogout}
-            className={`font-semibold flex gap-2 items-center shadow-md transition-all duration-300 ${
+            className={`text-[14px] font-semibold flex gap-2 items-center shadow-md transition-all duration-300 ${
               isScrolled
                 ? "bg-[#102A66] text-white hover:bg-[#173B8F]"
                 : "bg-white text-[#102A66] hover:bg-white/90"
@@ -112,7 +113,7 @@ export default function ClientAreaHeader({
           </Button>
         </div>
 
-        {/* MOBILE MENU */}
+        {/* Mobile Menu Button */}
         <button
           className={`md:hidden transition-colors duration-300 ${
             isScrolled ? "text-[#102A66]" : "text-white"
@@ -124,10 +125,10 @@ export default function ClientAreaHeader({
         </button>
       </nav>
 
-      {/* MOBILE NAVIGATION */}
+      {/* Mobile Navigation */}
       {isOpen && (
         <div
-          className={`md:hidden absolute top-[80px] left-0 w-full border-b px-4 py-4 space-y-3 shadow-lg transition-colors duration-300 ${
+          className={`md:hidden absolute top-[80px] left-0 w-full border-b px-4 py-4 space-y-3 shadow-lg animate-in fade-in slide-in-from-top-2 transition-colors duration-300 ${
             isScrolled
               ? "bg-white border-[#102A66]/10"
               : "bg-[#102A66] border-white/20"
@@ -138,7 +139,7 @@ export default function ClientAreaHeader({
             <button
               key={item.label}
               onClick={() => handleNavigation(item.path)}
-              className={`block w-full text-left py-2 font-medium transition-colors ${
+              className={`block w-full text-left py-2 text-[15px] font-medium transition-colors ${
                 isScrolled
                   ? "text-[#102A66]/80 hover:text-[#102A66]"
                   : "text-white/80 hover:text-white"
@@ -150,7 +151,7 @@ export default function ClientAreaHeader({
 
           <Button
             onClick={onLogout}
-            className={`w-full font-semibold mt-2 transition-all duration-300 ${
+            className={`w-full text-[15px] font-semibold mt-2 transition-all duration-300 ${
               isScrolled
                 ? "bg-[#102A66] text-white hover:bg-[#173B8F]"
                 : "bg-white text-[#102A66] hover:bg-white/90"

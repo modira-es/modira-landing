@@ -26,6 +26,7 @@ import CookiePolicy from "./pages/CookiePolicy";
 import TermsOfService from "./pages/TermsOfService";
 import LegalNotice from "./pages/LegalNotice";
 import CookieBanner from "./components/CookieBanner";
+import HowWeWorkGuide from "./pages/HowWeWorkGuide";
 
 function Router() {
   return (
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/admin" component={AdminPanel} />
       <Route path="/admin/presupuestos" component={AdminQuotations} />
       <Route path="/presupuesto/:id" component={QuotationView} />
+      <Route path="/como-trabajamos" component={HowWeWorkGuide} />
       <Route
   path="/area-cliente"
   component={() => (
