@@ -54,6 +54,12 @@ interface CompanyInfo {
   subscription_status: string | null;
 }
 
+/**
+ * ============================================================
+ * TARJETA DE SECCIÓN
+ * ============================================================
+ */
+
 const SectionCard = ({
   icon: Icon,
   title,
@@ -118,7 +124,7 @@ export default function ClientArea() {
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  /*
+  /**
    * ============================================================
    * SOLICITUD DE CAMBIO DE EMPRESA
    * ============================================================
@@ -127,35 +133,31 @@ export default function ClientArea() {
    *
    * profiles.company_id
    *
-   * En su lugar solicita a Modira un cambio.
+   * El cambio se solicita mediante:
    *
-   * La solicitud se enviará mediante:
+   * request_company_change(
+   *   p_requested_company_name
+   * )
    *
-   * request_company_change(p_requested_company_name TEXT)
-   *
-   * Esta RPC se creará posteriormente en las migraciones.
+   * La aprobación y modificación real de company_id
+   * corresponde al flujo interno de Modira.
    */
 
   const [isCompanyRequestDialogOpen, setIsCompanyRequestDialogOpen] =
     useState(false);
 
-  const [requestedCompanyName, setRequestedCompanyName] = useState("");
+  const [requestedCompanyName, setRequestedCompanyName] =
+    useState("");
 
   const [requestingCompanyChange, setRequestingCompanyChange] =
     useState(false);
 
-  /*
-   * Indica si ya existe una solicitud pendiente.
-   *
-   * Se utilizará cuando tengamos implementada la tabla/RPC
-   * correspondiente en las migraciones.
-   */
   const [hasPendingCompanyRequest, setHasPendingCompanyRequest] =
     useState(false);
 
-  /*
+  /**
    * ============================================================
-   * DATOS EDITABLES DEL PERFIL
+   * FORMULARIO EDITABLE
    * ============================================================
    *
    * El cliente puede modificar:
@@ -163,9 +165,10 @@ export default function ClientArea() {
    * - nombre
    * - teléfono
    *
-   * NO modifica:
+   * NO puede modificar:
    *
    * - company_id
+   * - rol
    * - empresa
    */
 
@@ -176,7 +179,7 @@ export default function ClientArea() {
 
   /**
    * ============================================================
-   * CARGAR PERFIL Y EMPRESA
+   * CARGAR PERFIL
    * ============================================================
    */
 
@@ -190,92 +193,197 @@ export default function ClientArea() {
       setLoading(true);
       setError(null);
 
-      // ==========================================================
-      // 1. PERFIL
-      // ==========================================================
+      setProfile(null);
+      setCompany(null);
+      setHasPendingCompanyRequest(false);
 
-      let { data, error: fetchError } = await supabase
+      /**
+       * ========================================================
+       * 1. OBTENER PERFIL
+       * ========================================================
+       *
+       * Primero intentamos leer el perfil existente.
+       *
+       * maybeSingle() permite que Supabase devuelva:
+       *
+       * - un perfil
+       * - null si no existe
+       *
+       * sin convertir la ausencia del registro en un error.
+       */
+
+      let {
+        data: profileData,
+        error: profileError,
+      } = await supabase
         .from("profiles")
-        .select("*")
+        .select(
+          `
+            id,
+            company_id,
+            nombre,
+            empresa,
+            telefono,
+            fecha_registro
+          `
+        )
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
-      // ==========================================================
-      // 2. CREAR PERFIL SI NO EXISTE
-      // ==========================================================
+      /**
+       * ========================================================
+       * 2. ERROR REAL DE LECTURA
+       * ========================================================
+       */
 
-      if (fetchError?.code === "PGRST116") {
-        const { data: newData, error: createError } = await supabase
+      if (profileError) {
+        console.error(
+          "[ClientArea] Error obteniendo perfil:",
+          profileError
+        );
+
+        throw profileError;
+      }
+
+      /**
+       * ========================================================
+       * 3. FALLBACK: CREAR PERFIL SI NO EXISTE
+       * ========================================================
+       *
+       * La arquitectura de seguridad permite que un usuario
+       * autenticado cree únicamente SU propio perfil.
+       *
+       * IMPORTANTE:
+       *
+       * NO enviamos:
+       *
+       * - company_id
+       * - empresa
+       * - email
+       * - rol personalizado
+       *
+       * El perfil de fallback se crea como usuario y sin empresa.
+       *
+       * El trigger handle_new_user() sigue siendo el mecanismo
+       * principal para crear perfiles durante el registro.
+       */
+
+      if (!profileData) {
+        console.warn(
+          "[ClientArea] No existe perfil. Intentando crear perfil propio..."
+        );
+
+        const fallbackName =
+          user.user_metadata?.nombre ||
+          user.user_metadata?.name ||
+          user.email?.split("@")[0] ||
+          "Usuario";
+
+        const {
+          data: createdProfile,
+          error: createProfileError,
+        } = await supabase
           .from("profiles")
-          .insert([
-            {
-              id: user.id,
-              nombre:
-                user.user_metadata?.nombre ||
-                user.email?.split("@")[0] ||
-                "Usuario",
-              rol: "user",
-              fecha_registro: new Date().toISOString(),
-              fecha_ultimo_login: new Date().toISOString(),
-            },
-          ])
-          .select()
+          .insert({
+            id: user.id,
+            nombre: fallbackName,
+            rol: "user",
+            fecha_registro: new Date().toISOString(),
+            fecha_ultimo_login: new Date().toISOString(),
+          })
+          .select(
+            `
+              id,
+              company_id,
+              nombre,
+              empresa,
+              telefono,
+              fecha_registro
+            `
+          )
           .single();
 
-        if (createError) {
-          throw createError;
+        if (createProfileError) {
+          console.error(
+            "[ClientArea] Error creando perfil fallback:",
+            createProfileError
+          );
+
+          throw createProfileError;
         }
 
-        data = newData;
-      } else if (fetchError) {
-        throw fetchError;
+        profileData = createdProfile;
+
+        console.info(
+          "[ClientArea] Perfil fallback creado correctamente."
+        );
       }
 
-      if (!data) {
-        throw new Error("No se encontró el perfil del usuario.");
+      /**
+       * ========================================================
+       * 4. COMPROBACIÓN FINAL
+       * ========================================================
+       */
+
+      if (!profileData) {
+        throw new Error(
+          "No se ha podido obtener ni crear el perfil de la cuenta."
+        );
       }
 
-      // ==========================================================
-      // 3. GUARDAR PERFIL
-      // ==========================================================
+      /**
+       * ========================================================
+       * 5. GUARDAR PERFIL
+       * ========================================================
+       */
 
-      setProfile(data as UserProfile);
+      setProfile(profileData as UserProfile);
 
-      // ==========================================================
-      // 4. FORMULARIO EDITABLE
-      // ==========================================================
+      /**
+       * ========================================================
+       * 6. CARGAR FORMULARIO
+       * ========================================================
+       */
 
       setEditForm({
-        nombre: data.nombre || "",
-        telefono: data.telefono || "",
+        nombre: profileData.nombre || "",
+        telefono: profileData.telefono || "",
       });
 
-      // ==========================================================
-      // 5. CARGAR EMPRESA REAL
-      // ==========================================================
-      //
-      // profiles.company_id
-      //        ↓
-      // companies.id
-      //        ↓
-      // companies.company_name
-      //
-      // NO usamos profiles.empresa.
-      // ==========================================================
+      /**
+       * ========================================================
+       * 7. CARGAR EMPRESA REAL
+       * ========================================================
+       *
+       * RELACIÓN:
+       *
+       * profiles.company_id
+       *        ↓
+       * companies.id
+       *        ↓
+       * companies.company_name
+       *
+       * NO usamos:
+       *
+       * profiles.empresa
+       */
 
-      setCompany(null);
-
-      if (data.company_id) {
+      if (profileData.company_id) {
         const {
           data: companyData,
           error: companyError,
         } = await supabase
           .from("companies")
           .select(
-            "id, company_name, subscription_plan, subscription_status"
+            `
+              id,
+              company_name,
+              subscription_plan,
+              subscription_status
+            `
           )
-          .eq("id", data.company_id)
-          .single();
+          .eq("id", profileData.company_id)
+          .maybeSingle();
 
         if (companyError) {
           console.warn(
@@ -287,17 +395,16 @@ export default function ClientArea() {
         }
       }
 
-      // ==========================================================
-      // 6. COMPROBAR SOLICITUD PENDIENTE
-      // ==========================================================
-      //
-      // Esta tabla será creada en una migración posterior:
-      //
-      // company_change_requests
-      //
-      // De momento esta consulta se mantiene preparada para
-      // trabajar con la arquitectura definitiva.
-      // ==========================================================
+      /**
+       * ========================================================
+       * 8. COMPROBAR SOLICITUD DE CAMBIO PENDIENTE
+       * ========================================================
+       *
+       * Esta consulta es secundaria.
+       *
+       * Si la tabla no está disponible o existe algún problema
+       * de RLS, no impedimos que cargue el área de cliente.
+       */
 
       const {
         data: pendingRequest,
@@ -309,11 +416,6 @@ export default function ClientArea() {
         .eq("status", "pending")
         .limit(1);
 
-      /*
-       * Mientras la migración todavía no exista, esta consulta
-       * puede devolver un error. No queremos que eso impida
-       * cargar el área de cliente.
-       */
       if (pendingRequestError) {
         console.warn(
           "[ClientArea] No se pudo comprobar la solicitud de empresa:",
@@ -323,25 +425,45 @@ export default function ClientArea() {
         setHasPendingCompanyRequest(false);
       } else {
         setHasPendingCompanyRequest(
-          Array.isArray(pendingRequest) && pendingRequest.length > 0
+          Array.isArray(pendingRequest) &&
+            pendingRequest.length > 0
         );
       }
     } catch (err: any) {
-      console.error("[ClientArea] Error:", err);
+      console.error(
+        "[ClientArea] Error cargando el perfil:",
+        err
+      );
+
+      setProfile(null);
+      setCompany(null);
+      setHasPendingCompanyRequest(false);
+
+      /**
+       * Mensaje amigable para el usuario.
+       *
+       * En consola queda el error real de Supabase.
+       */
 
       setError(
-        `Error al cargar el perfil: ${
-          err?.message || "Error desconocido"
-        }`
+        "No se ha podido cargar la información de tu cuenta."
       );
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * ============================================================
+   * EFECTO INICIAL
+   * ============================================================
+   */
+
   useEffect(() => {
-    fetchProfile();
-  }, [user]);
+    if (!authLoading) {
+      fetchProfile();
+    }
+  }, [user, authLoading]);
 
   /**
    * ============================================================
@@ -350,18 +472,28 @@ export default function ClientArea() {
    *
    * IMPORTANTE:
    *
-   * company_id NO se modifica aquí.
+   * company_id NO se modifica.
    */
 
   const handleUpdateProfile = async () => {
-    if (!user || !profile) return;
+    if (!user || !profile) {
+      return;
+    }
+
+    const nombre = editForm.nombre.trim();
+    const telefono = editForm.telefono.trim();
+
+    if (!nombre) {
+      toast.error("El nombre no puede estar vacío.");
+      return;
+    }
 
     try {
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          nombre: editForm.nombre.trim(),
-          telefono: editForm.telefono?.trim() || null,
+          nombre,
+          telefono: telefono || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user.id);
@@ -370,12 +502,19 @@ export default function ClientArea() {
         throw updateError;
       }
 
-      toast.success("Perfil actualizado correctamente");
+      toast.success(
+        "Perfil actualizado correctamente."
+      );
 
       setIsEditDialogOpen(false);
 
       await fetchProfile();
     } catch (err: any) {
+      console.error(
+        "[ClientArea] Error actualizando perfil:",
+        err
+      );
+
       toast.error(
         `Error al actualizar el perfil: ${
           err?.message || "Error desconocido"
@@ -389,29 +528,38 @@ export default function ClientArea() {
    * SOLICITAR CAMBIO DE EMPRESA
    * ============================================================
    *
-   * NO actualizamos profiles.company_id.
+   * El cliente NO actualiza:
    *
-   * Se llama a la RPC:
+   * profiles.company_id
+   *
+   * directamente.
+   *
+   * Se utiliza la RPC:
    *
    * request_company_change({
    *   p_requested_company_name: requestedCompanyName
    * })
-   *
-   * La RPC será creada posteriormente en las migraciones.
    */
 
   const handleRequestCompanyChange = async () => {
-    if (!user) return;
+    if (!user) {
+      return;
+    }
 
-    const companyName = requestedCompanyName.trim();
+    const companyName =
+      requestedCompanyName.trim();
 
     if (!companyName) {
-      toast.error("Indica la empresa que quieres solicitar.");
+      toast.error(
+        "Indica la empresa que quieres solicitar."
+      );
       return;
     }
 
     if (companyName.length < 2) {
-      toast.error("Introduce un nombre de empresa válido.");
+      toast.error(
+        "Introduce un nombre de empresa válido."
+      );
       return;
     }
 
@@ -425,10 +573,13 @@ export default function ClientArea() {
     try {
       setRequestingCompanyChange(true);
 
-      const { error: requestError } = await supabase.rpc(
+      const {
+        error: requestError,
+      } = await supabase.rpc(
         "request_company_change",
         {
-          p_requested_company_name: companyName,
+          p_requested_company_name:
+            companyName,
         }
       );
 
@@ -451,7 +602,8 @@ export default function ClientArea() {
 
       toast.error(
         `No se pudo enviar la solicitud: ${
-          err?.message || "Error desconocido"
+          err?.message ||
+          "Error desconocido"
         }`
       );
     } finally {
@@ -473,9 +625,11 @@ export default function ClientArea() {
     }
   };
 
-  // ============================================================
-  // LOADING
-  // ============================================================
+  /**
+   * ============================================================
+   * LOADING
+   * ============================================================
+   */
 
   if (authLoading || loading) {
     return (
@@ -498,6 +652,12 @@ export default function ClientArea() {
     );
   }
 
+  /**
+   * ============================================================
+   * SIN USUARIO AUTENTICADO
+   * ============================================================
+   */
+
   if (!user) {
     return null;
   }
@@ -518,7 +678,7 @@ export default function ClientArea() {
         onLogout={handleLogout}
       />
 
-      <main className="container mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 xl:px-16 pt-[120px] pb-14">
+      <main className="container mx-auto max-w-[1440px] px-6 pt-[120px] pb-14 sm:px-8 lg:px-12 xl:px-16">
 
         {/* ============================================================
             ERROR
@@ -562,7 +722,9 @@ export default function ClientArea() {
           <button
             type="button"
             onClick={() =>
-              setLocation("/area-cliente/proyectos")
+              setLocation(
+                "/area-cliente/proyectos"
+              )
             }
             className="rounded-2xl border border-[#E8ECF2] bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-[#173B8F] hover:shadow-md"
           >
@@ -589,7 +751,9 @@ export default function ClientArea() {
           <button
             type="button"
             onClick={() =>
-              setLocation("/area-cliente/presupuestos")
+              setLocation(
+                "/area-cliente/presupuestos"
+              )
             }
             className="rounded-2xl border border-[#E8ECF2] bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-[#173B8F] hover:shadow-md"
           >
@@ -616,7 +780,9 @@ export default function ClientArea() {
           <button
             type="button"
             onClick={() =>
-              setLocation("/area-cliente/facturacion")
+              setLocation(
+                "/area-cliente/facturacion"
+              )
             }
             className="rounded-2xl border border-[#E8ECF2] bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-[#173B8F] hover:shadow-md"
           >
@@ -643,7 +809,9 @@ export default function ClientArea() {
           <button
             type="button"
             onClick={() =>
-              setLocation("/area-cliente/soporte")
+              setLocation(
+                "/area-cliente/soporte"
+              )
             }
             className="rounded-2xl border border-[#E8ECF2] bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-[#173B8F] hover:shadow-md"
           >
@@ -694,7 +862,7 @@ export default function ClientArea() {
             {/* FECHA DE REGISTRO */}
 
             {profile && (
-              <div className="hidden md:flex items-center gap-2 pb-1">
+              <div className="hidden items-center gap-2 pb-1 md:flex">
 
                 <Calendar className="h-4 w-4 text-[#173B8F]" />
 
@@ -707,7 +875,9 @@ export default function ClientArea() {
                     {profile.fecha_registro
                       ? new Date(
                           profile.fecha_registro
-                        ).toLocaleDateString("es-ES")
+                        ).toLocaleDateString(
+                          "es-ES"
+                        )
                       : "-"}
                   </span>
                 </div>
@@ -732,7 +902,9 @@ export default function ClientArea() {
                 {profile.fecha_registro
                   ? new Date(
                       profile.fecha_registro
-                    ).toLocaleDateString("es-ES")
+                    ).toLocaleDateString(
+                      "es-ES"
+                    )
                   : "-"}
               </span>
 
@@ -880,7 +1052,9 @@ export default function ClientArea() {
                     </div>
 
                     <Dialog
-                      open={isCompanyRequestDialogOpen}
+                      open={
+                        isCompanyRequestDialogOpen
+                      }
                       onOpenChange={
                         setIsCompanyRequestDialogOpen
                       }
@@ -890,7 +1064,9 @@ export default function ClientArea() {
 
                         <Button
                           type="button"
-                          disabled={hasPendingCompanyRequest}
+                          disabled={
+                            hasPendingCompanyRequest
+                          }
                           className="shrink-0 bg-[#173B8F] font-semibold text-white hover:bg-[#102A66] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Send className="mr-2 h-4 w-4" />
@@ -953,7 +1129,9 @@ export default function ClientArea() {
                             <Input
                               id="requested-company"
                               placeholder="Ej. Empresa S.L."
-                              value={requestedCompanyName}
+                              value={
+                                requestedCompanyName
+                              }
                               onChange={(event) =>
                                 setRequestedCompanyName(
                                   event.target.value
@@ -1079,7 +1257,9 @@ export default function ClientArea() {
 
                         <Input
                           id="name"
-                          value={editForm.nombre}
+                          value={
+                            editForm.nombre
+                          }
                           onChange={(event) =>
                             setEditForm({
                               ...editForm,
@@ -1101,7 +1281,9 @@ export default function ClientArea() {
 
                         <Input
                           id="phone"
-                          value={editForm.telefono}
+                          value={
+                            editForm.telefono
+                          }
                           onChange={(event) =>
                             setEditForm({
                               ...editForm,
@@ -1147,7 +1329,9 @@ export default function ClientArea() {
                         type="button"
                         variant="outline"
                         onClick={() =>
-                          setIsEditDialogOpen(false)
+                          setIsEditDialogOpen(
+                            false
+                          )
                         }
                       >
                         Cancelar
@@ -1173,9 +1357,17 @@ export default function ClientArea() {
 
             ) : (
 
-              <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center justify-center py-12 text-center">
 
-                <Loader2 className="h-8 w-8 animate-spin text-[#173B8F]" />
+                <AlertCircle className="mb-4 h-8 w-8 text-red-500" />
+
+                <p className="font-semibold text-[#102A66]">
+                  No se ha podido cargar tu perfil.
+                </p>
+
+                <p className="mt-2 text-sm text-[#52627A]">
+                  Si el problema continúa, contacta con Modira.
+                </p>
 
               </div>
 

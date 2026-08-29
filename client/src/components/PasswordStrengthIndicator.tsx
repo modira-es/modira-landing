@@ -8,7 +8,7 @@ export function PasswordStrengthIndicator({
   password,
 }: PasswordStrengthIndicatorProps) {
   const checks = {
-    length: password.length >= 8,
+    length: password.length >= 10,
     uppercase: /[A-Z]/.test(password),
     lowercase: /[a-z]/.test(password),
     number: /[0-9]/.test(password),
@@ -61,7 +61,7 @@ export function PasswordStrengthIndicator({
             <XCircle className="h-4 w-4 text-gray-300 flex-shrink-0" />
           )}
           <span className="text-xs text-gray-600">
-            Mínimo 8 caracteres
+            Mínimo 10 caracteres
           </span>
         </div>
 

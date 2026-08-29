@@ -594,3 +594,22 @@ COMMIT;
 --     attach_quotation_document()
 --
 -- ============================================================
+-- ============================================================
+-- PROFILES — SERVICE ROLE
+-- ============================================================
+--
+-- create-checkout-session utiliza service_role exclusivamente
+-- en backend para comprobar profiles.status y bloquear pagos
+-- de cuentas con status = 'blocked'.
+--
+-- La service_role no se expone al frontend.
+--
+-- RLS sigue controlando el acceso de los usuarios autenticados.
+-- Este GRANT únicamente permite al backend administrativo
+-- realizar la lectura necesaria.
+--
+-- ============================================================
+
+GRANT SELECT
+ON TABLE public.profiles
+TO service_role;

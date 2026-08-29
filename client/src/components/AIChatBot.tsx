@@ -3,126 +3,616 @@ import { Bot, X, Sparkles } from "lucide-react";
 import { AIChatBox, type Message } from "./AIChatBox";
 import { supabase } from "@/lib/supabase";
 
-type AIChatBotProps = {
-  /**
-   * Función opcional para conectar el chatbot
-   * con tu backend / IA real.
-   *
-   * Si no se proporciona, se utiliza una respuesta
-   * local de demostración.
-   */
-  onAIResponse?: (
-    messages: Message[]
-  ) => Promise<string> | string;
+
+// ============================================================
+// UUID
+// ============================================================
+
+function isValidUuid(
+  value: unknown
+): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+
+// ============================================================
+// SESSION ID
+// ============================================================
+//
+// El mismo sessionId se utiliza durante toda la conversación.
+//
+// Esto es importante porque Supabase utiliza:
+//
+// session:<sessionId>
+//
+// como clave del rate limit.
+// ============================================================
+
+function getOrCreateSessionId(): string {
+  const storageKey =
+    "modira_ai_session_id";
+
+  try {
+    const existing =
+      localStorage.getItem(storageKey);
+
+    if (
+      existing &&
+      isValidUuid(existing)
+    ) {
+      return existing;
+    }
+
+    const newSessionId =
+      crypto.randomUUID();
+
+    localStorage.setItem(
+      storageKey,
+      newSessionId
+    );
+
+    return newSessionId;
+
+  } catch {
+    // Si localStorage no está disponible,
+    // generamos un UUID para esta sesión.
+
+    return crypto.randomUUID();
+  }
+}
+
+
+// ============================================================
+// TIPO DE RESPUESTA DE RATE LIMIT
+// ============================================================
+
+type RateLimitErrorResponse = {
+  error?: string;
+  retryAfterSeconds?: number;
+  remaining?: number;
 };
 
-export function AIChatBot({ onAIResponse }: AIChatBotProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showAIHint, setShowAIHint] = useState(true);
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "system",
-      content:
-        "Eres Modira AI, el asistente virtual de Modira. Ayudas a los usuarios a entender qué es Modira, qué procesos pueden automatizar y cómo funciona la plataforma. Responde de forma clara, profesional y breve.",
-    },
-    {
-    role: "assistant",
-    content:
-"¡Hola! 👋 Soy Modira AI.\n\n" +
-    "Estoy aquí para ayudarte a descubrir qué procesos de tu empresa puedes automatizar y cómo Modira puede ayudarte a ahorrar tiempo y reducir tareas manuales.\n\n" +
-    "Puedes preguntarme sobre:\n\n" +
-    "• Automatización de procesos\n\n" +
-    "• Integraciones y herramientas\n\n" +
-    "• Ahorro de tiempo y costes\n\n" +
-    "• Cómo funciona Modira\n\n" +
-    "• Soluciones para tu empresa\n\n" +
-    "¡Y mucho más!\n\n" +
-    "¿En qué puedo ayudarte?",
-  },
-  ]);
+// ============================================================
+// OBTENER RESPUESTA DE ERROR DE SUPABASE
+// ============================================================
+//
+// supabase.functions.invoke() puede devolver el Response
+// HTTP original dentro de error.context.
+//
+// No debemos depender exclusivamente de error.message,
+// porque ahí normalmente NO viene el JSON que devuelve
+// nuestra Edge Function.
+// ============================================================
 
-  const handleSendMessage = async (content: string) => {
-    if (isLoading) return;
+async function getFunctionErrorResponse(
+  error: unknown
+): Promise<{
+  status: number | null;
+  body: RateLimitErrorResponse | null;
+}> {
+  if (
+    !error ||
+    typeof error !== "object"
+  ) {
+    return {
+      status: null,
+      body: null,
+    };
+  }
+
+  const possibleError =
+    error as {
+      context?: unknown;
+      status?: number;
+      message?: string;
+    };
+
+
+  // ----------------------------------------------------------
+  // STATUS
+  // ----------------------------------------------------------
+
+  let status:
+    | number
+    | null =
+    typeof possibleError.status ===
+      "number"
+      ? possibleError.status
+      : null;
+
+
+  // ----------------------------------------------------------
+  // RESPONSE
+  // ----------------------------------------------------------
+
+  const context =
+    possibleError.context;
+
+
+  if (
+    context instanceof Response
+  ) {
+    status =
+      context.status;
+
+
+    try {
+      const body =
+        await context
+          .clone()
+          .json();
+
+      return {
+        status,
+        body:
+          body &&
+          typeof body === "object"
+            ? body as RateLimitErrorResponse
+            : null,
+      };
+
+    } catch {
+      return {
+        status,
+        body: null,
+      };
+    }
+  }
+
+
+  // ----------------------------------------------------------
+  // ALGUNAS VERSIONES / CONFIGURACIONES PUEDEN EXPONER
+  // EL RESPONSE DE OTRA FORMA.
+  // ----------------------------------------------------------
+
+  if (
+    context &&
+    typeof context === "object"
+  ) {
+    const responseLike =
+      context as {
+        status?: number;
+        json?: () => Promise<unknown>;
+      };
+
+
+    if (
+      typeof responseLike.status ===
+      "number"
+    ) {
+      status =
+        responseLike.status;
+    }
+
+
+    if (
+      typeof responseLike.json ===
+      "function"
+    ) {
+      try {
+        const body =
+          await responseLike.json();
+
+        return {
+          status,
+          body:
+            body &&
+            typeof body === "object"
+              ? body as RateLimitErrorResponse
+              : null,
+        };
+
+      } catch {
+        // Continuamos con fallback.
+      }
+    }
+  }
+
+
+  return {
+    status,
+    body: null,
+  };
+}
+
+
+// ============================================================
+// FORMATEAR RETRY AFTER
+// ============================================================
+
+function formatRetryAfter(
+  seconds: number
+): string {
+  const safeSeconds =
+    Math.max(
+      0,
+      Math.ceil(seconds)
+    );
+
+
+  if (
+    safeSeconds < 60
+  ) {
+    return `menos de un minuto`;
+  }
+
+
+  const minutes =
+    Math.ceil(
+      safeSeconds / 60
+    );
+
+
+  if (
+    minutes < 60
+  ) {
+    return `${minutes} minuto${minutes === 1 ? "" : "s"}`;
+  }
+
+
+  const hours =
+    Math.ceil(
+      minutes / 60
+    );
+
+
+  return `${hours} hora${hours === 1 ? "" : "s"}`;
+}
+
+
+// ============================================================
+// COMPONENTE
+// ============================================================
+
+export function AIChatBot() {
+  const [isOpen, setIsOpen] =
+    useState(false);
+
+  const [isLoading, setIsLoading] =
+    useState(false);
+
+  const [showAIHint, setShowAIHint] =
+    useState(true);
+
+
+  // ----------------------------------------------------------
+  // SESSION ID
+  // ----------------------------------------------------------
+  //
+  // Se crea solamente una vez por montaje.
+  // ----------------------------------------------------------
+
+  const [sessionId] =
+    useState<string>(
+      () => getOrCreateSessionId()
+    );
+
+
+  // ----------------------------------------------------------
+  // MENSAJES
+  // ----------------------------------------------------------
+
+  const [messages, setMessages] =
+    useState<Message[]>([
+      {
+        role: "assistant",
+
+        content:
+          "¡Hola! 👋 Soy Modira AI.\n\n" +
+          "Estoy aquí para ayudarte a descubrir qué procesos de tu empresa puedes automatizar y cómo Modira puede ayudarte a ahorrar tiempo y reducir tareas manuales.\n\n" +
+          "Puedes preguntarme sobre:\n\n" +
+          "• Automatización de procesos\n\n" +
+          "• Integraciones y herramientas\n\n" +
+          "• Ahorro de tiempo y costes\n\n" +
+          "• Cómo funciona Modira\n\n" +
+          "• Soluciones para tu empresa\n\n" +
+          "¡Y mucho más!\n\n" +
+          "¿En qué puedo ayudarte?",
+      },
+    ]);
+
+
+  // ============================================================
+  // ENVIAR MENSAJE
+  // ============================================================
+
+  const handleSendMessage = async (
+    content: string
+  ) => {
+
+    // ----------------------------------------------------------
+    // EVITAR PETICIONES SIMULTÁNEAS
+    // ----------------------------------------------------------
+
+    if (isLoading) {
+      return;
+    }
+
+
+    // ----------------------------------------------------------
+    // LIMPIAR CONTENIDO
+    // ----------------------------------------------------------
+
+    const trimmedContent =
+      content.trim();
+
+
+    if (!trimmedContent) {
+      return;
+    }
+
+
+    // ----------------------------------------------------------
+    // MENSAJE DEL USUARIO
+    // ----------------------------------------------------------
 
     const userMessage: Message = {
       role: "user",
-      content,
+      content: trimmedContent,
     };
 
-    const sessionId =
-  localStorage.getItem("modira_ai_session_id") ||
-  crypto.randomUUID();
 
-localStorage.setItem(
-  "modira_ai_session_id",
-  sessionId
-);
+    // ----------------------------------------------------------
+    // HISTORIAL QUE SE ENVÍA
+    // ----------------------------------------------------------
 
-    const updatedMessages = [...messages, userMessage];
+    const updatedMessages =
+      [
+        ...messages,
+        userMessage,
+      ];
 
-    setMessages(updatedMessages);
+
+    // ----------------------------------------------------------
+    // ACTUALIZAR UI
+    // ----------------------------------------------------------
+
+    setMessages(
+      updatedMessages
+    );
+
     setIsLoading(true);
 
+
     try {
-      let response: string;
 
-      /*
-       * =====================================================
-       * CONEXIÓN CON LA IA REAL
-       * =====================================================
-       *
-       * Si proporcionas onAIResponse desde la landing,
-       * se utilizará esa función.
-       *
-       * Si no existe, usamos una respuesta local de prueba.
-       */
+      // ======================================================
+      // LLAMAR A EDGE FUNCTION
+      // ======================================================
 
-      if (onAIResponse) {
-  response = await onAIResponse(updatedMessages);
-} else {
-  const { data, error } = await supabase.functions.invoke(
-    "modira-ai",
-    {
-     body: {
-  messages: updatedMessages,
-  sessionId,
-},
-    }
-  );
+      const {
+        data,
+        error,
+      } =
+        await supabase.functions.invoke(
+          "modira-ai",
+          {
+            body: {
+              messages:
+                updatedMessages.filter(
+                  (message) =>
+                    message.role !==
+                    "system"
+                ),
 
-  if (error) {
-    throw error;
-  }
+              sessionId,
+            },
+          }
+        );
 
-  response = data.response;
-}
 
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: response,
-      };
+      // ======================================================
+      // ERROR DE EDGE FUNCTION
+      // ======================================================
 
-      setMessages((previous) => [
-        ...previous,
-        assistantMessage,
-      ]);
-    } catch (error) {
-      console.error("Error en Modira AI:", error);
+      if (error) {
 
-      setMessages((previous) => [
-        ...previous,
-        {
+        console.error(
+          "MODIRA AI: Edge Function error.",
+          error
+        );
+
+
+        // ----------------------------------------------------
+        // RECUPERAR STATUS + BODY
+        // ----------------------------------------------------
+
+        const {
+          status,
+          body,
+        } =
+          await getFunctionErrorResponse(
+            error
+          );
+
+
+        // ----------------------------------------------------
+        // RATE LIMIT 429
+        // ----------------------------------------------------
+
+        if (
+          status === 429 ||
+          typeof body?.retryAfterSeconds ===
+            "number"
+        ) {
+
+          const retryAfter =
+            Number(
+              body?.retryAfterSeconds
+            );
+
+
+          if (
+            Number.isFinite(
+              retryAfter
+            ) &&
+            retryAfter > 0
+          ) {
+
+            const retryText =
+              formatRetryAfter(
+                retryAfter
+              );
+
+
+            setMessages(
+              (previous) => [
+                ...previous,
+
+                {
+                  role: "assistant",
+
+                  content:
+                    `Has alcanzado temporalmente el límite de mensajes de Modira AI.\n\nPuedes volver a utilizarlo en aproximadamente ${retryText}.`,
+                },
+              ]
+            );
+
+            return;
+          }
+
+
+          // Si sabemos que es 429 pero no
+          // tenemos retryAfterSeconds.
+
+          setMessages(
+            (previous) => [
+              ...previous,
+
+              {
+                role: "assistant",
+
+                content:
+                  "Has alcanzado temporalmente el límite de mensajes de Modira AI. Inténtalo de nuevo más tarde.",
+              },
+            ]
+          );
+
+          return;
+        }
+
+
+        // ----------------------------------------------------
+        // OTROS ERRORES DEVUELTOS POR LA EDGE FUNCTION
+        // ----------------------------------------------------
+
+        if (
+          body?.error &&
+          typeof body.error ===
+            "string"
+        ) {
+
+          setMessages(
+            (previous) => [
+              ...previous,
+
+              {
+                role: "assistant",
+
+                content:
+                  body.error!,
+              },
+            ]
+          );
+
+          return;
+        }
+
+
+        // ----------------------------------------------------
+        // ERROR DESCONOCIDO
+        // ----------------------------------------------------
+
+        throw error;
+      }
+
+
+      // ======================================================
+      // VALIDAR RESPUESTA
+      // ======================================================
+
+      if (
+        !data ||
+        typeof data.response !==
+          "string" ||
+        !data.response.trim()
+      ) {
+        throw new Error(
+          "La IA no devolvió ninguna respuesta."
+        );
+      }
+
+
+      // ======================================================
+      // RESPUESTA DEL ASISTENTE
+      // ======================================================
+
+      const assistantMessage:
+        Message = {
           role: "assistant",
+
           content:
-            "Lo siento, ha ocurrido un error al procesar tu mensaje. Inténtalo de nuevo.",
-        },
-      ]);
+            data.response.trim(),
+        };
+
+
+      // ======================================================
+      // ACTUALIZAR CHAT
+      // ======================================================
+
+      setMessages(
+        (previous) => [
+          ...previous,
+          assistantMessage,
+        ]
+      );
+
+    } catch (error) {
+
+      // ======================================================
+      // ERROR GENERAL
+      // ======================================================
+
+      console.error(
+        "Error en Modira AI:",
+        error
+      );
+
+
+      setMessages(
+        (previous) => [
+          ...previous,
+
+          {
+            role: "assistant",
+
+            content:
+              "Lo siento, ha ocurrido un error al procesar tu mensaje. Inténtalo de nuevo.",
+          },
+        ]
+      );
+
     } finally {
+
+      // ======================================================
+      // FINALIZAR CARGA
+      // ======================================================
+
       setIsLoading(false);
     }
   };
+
+
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <>
@@ -141,6 +631,7 @@ localStorage.setItem(
             max-w-[calc(100vw-32px)]
           "
         >
+
           <div
             className="
               overflow-hidden
@@ -151,7 +642,10 @@ localStorage.setItem(
               shadow-2xl
             "
           >
-            {/* HEADER DEL CHAT */}
+
+            {/* =================================================
+                HEADER
+                ================================================= */}
 
             <div
               className="
@@ -165,7 +659,15 @@ localStorage.setItem(
                 py-3
               "
             >
-              <div className="flex items-center gap-3">
+
+              <div
+                className="
+                  flex
+                  items-center
+                  gap-3
+                "
+              >
+
                 <div
                   className="
                     flex
@@ -176,23 +678,49 @@ localStorage.setItem(
                     bg-primary/10
                   "
                 >
-                  <Sparkles className="size-5 text-primary" />
+                  <Sparkles
+                    className="
+                      size-5
+                      text-primary
+                    "
+                  />
                 </div>
 
+
                 <div>
-                  <p className="text-sm font-semibold">
+
+                  <p
+                    className="
+                      text-sm
+                      font-semibold
+                    "
+                  >
                     Modira AI
                   </p>
 
-                  <p className="text-xs text-muted-foreground">
+                  <p
+                    className="
+                      text-xs
+                      text-muted-foreground
+                    "
+                  >
                     Asistente inteligente
                   </p>
+
                 </div>
+
               </div>
+
+
+              {/* =================================================
+                  CERRAR
+                  ================================================= */}
 
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={() =>
+                  setIsOpen(false)
+                }
                 className="
                   flex
                   size-8
@@ -208,13 +736,19 @@ localStorage.setItem(
               >
                 <X className="size-4" />
               </button>
+
             </div>
 
-            {/* CHAT */}
+
+            {/* =================================================
+                CHAT
+                ================================================= */}
 
             <AIChatBox
               messages={messages}
-              onSendMessage={handleSendMessage}
+              onSendMessage={
+                handleSendMessage
+              }
               isLoading={isLoading}
               height="480px"
               placeholder="Escribe tu pregunta..."
@@ -230,30 +764,93 @@ localStorage.setItem(
                 shadow-none
               "
             />
+
           </div>
         </div>
       )}
 
+
+      {/* =====================================================
+          AVISO IA
+          ===================================================== */}
+
+      {showAIHint && !isOpen && (
+        <div
+          className="
+            fixed
+            bottom-[82px]
+            right-6
+            z-50
+            flex
+            items-center
+            gap-2
+            rounded-full
+            border
+            border-border
+            bg-background
+            px-3
+            py-1.5
+            text-xs
+            text-muted-foreground
+            shadow-sm
+          "
+        >
+
+          <span>
+            Hola, soy la IA de Modira 👋
+          </span>
+
+
+          <button
+            type="button"
+            onClick={() =>
+              setShowAIHint(false)
+            }
+            className="
+              flex
+              size-4
+              items-center
+              justify-center
+              rounded-full
+              text-muted-foreground
+              transition-colors
+              hover:bg-muted
+              hover:text-foreground
+            "
+            aria-label="Cerrar mensaje"
+          >
+            <X className="size-3" />
+          </button>
+
+        </div>
+      )}
+
+
       {/* =====================================================
           BOTÓN FLOTANTE
           ===================================================== */}
-{showAIHint && !isOpen && (
-  <div className="fixed bottom-[82px] right-6 z-50 flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-    <span>Hola, soy la IA de Modira 👋</span>
 
-    <button
-      type="button"
-      onClick={() => setShowAIHint(false)}
-      className="flex size-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      aria-label="Cerrar mensaje"
-    >
-      <X className="size-3" />
-    </button>
-  </div>
-)}
       <button
         type="button"
-        onClick={() => setIsOpen((previous) => !previous)}
+        onClick={() => {
+
+          setIsOpen(
+            (previous) => {
+
+              const next =
+                !previous;
+
+
+              if (next) {
+                setShowAIHint(false);
+              }
+
+
+              return next;
+            }
+          );
+
+        }}
         className="
           fixed
           bottom-6
@@ -280,90 +877,14 @@ localStorage.setItem(
         }
         title="Modira AI"
       >
+
         {isOpen ? (
           <X className="size-6" />
         ) : (
           <Bot className="size-6" />
         )}
+
       </button>
     </>
   );
-}
-
-
-/* ============================================================
-   RESPUESTAS DE DEMOSTRACIÓN
-   ============================================================
-
-   Esto permite comprobar que TODO EL CHAT funciona incluso
-   antes de conectar una IA real.
-
-   Cuando conectemos el backend, esta función dejará de ser
-   necesaria.
-   ============================================================ */
-
-function getDemoResponse(content: string): string {
-  const message = content.toLowerCase();
-
-  if (
-    message.includes("qué es modira") ||
-    message.includes("que es modira")
-  ) {
-    return `
-**Modira** es una plataforma de automatización inteligente para empresas.
-
-Permite conectar procesos, herramientas y equipos para reducir tareas manuales y hacer que el trabajo sea más eficiente.
-
-Puedes utilizar Modira para automatizar diferentes procesos empresariales y centralizar su gestión.
-`;
-  }
-
-  if (
-    message.includes("automatizar") ||
-    message.includes("automatización") ||
-    message.includes("automatizacion")
-  ) {
-    return `
-Con Modira puedes automatizar procesos repetitivos de tu empresa.
-
-Por ejemplo:
-
-- Gestión de clientes
-- Proyectos
-- Facturación
-- Notificaciones
-- Documentos
-- Tareas internas
-- Flujos de trabajo
-
-La idea es conectar las diferentes partes del negocio y hacer que trabajen de forma automática.
-`;
-  }
-
-  if (
-    message.includes("cómo funciona") ||
-    message.includes("como funciona")
-  ) {
-    return `
-El funcionamiento de Modira se basa en **conectar tus procesos y automatizar las tareas repetitivas**.
-
-En lugar de trabajar con herramientas aisladas, Modira permite crear flujos donde una acción puede desencadenar automáticamente otra.
-
-Así puedes reducir trabajo manual y tener una visión más centralizada de tus procesos.
-`;
-  }
-
-  return `
-Soy **Modira AI**, el asistente virtual de Modira. ✨
-
-Puedo ayudarte a entender:
-
-- Qué es Modira
-- Qué procesos puedes automatizar
-- Cómo funciona la plataforma
-- Qué problemas puede resolver
-- Cómo puede ayudar a una empresa
-
-Pregúntame lo que quieras sobre Modira.
-`;
 }

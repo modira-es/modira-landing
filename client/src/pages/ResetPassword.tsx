@@ -6,12 +6,15 @@ import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 
 export default function ResetPassword() {
   const [, setLocation] = useLocation();
-  const { updatePassword, loading: authLoading } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
+const {
+  updatePassword,
+  signOut,
+  isRecoverySession,
+  loading: authLoading,
+} = useAuth();  const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -26,29 +29,55 @@ export default function ResetPassword() {
 
   // Check if user has a valid recovery session
   useEffect(() => {
-    const checkRecoverySession = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+  const checkRecoverySession = () => {
+    try {
+      // Supabase puede devolver los errores del enlace
+      // directamente en el hash de la URL.
+      const hashParams = new URLSearchParams(
+        window.location.hash.replace(/^#/, "")
+      );
 
-        if (session) {
-          setValidToken(true);
-        } else {
-          setError(
-            "El enlace de recuperación es inválido o ha expirado. Por favor solicita uno nuevo."
-          );
-        }
-      } catch (err) {
-        console.error("[Auth] Error checking recovery session:", err);
-        setError("Error al verificar el enlace de recuperación.");
-      } finally {
+      const errorCode = hashParams.get("error_code");
+      const error = hashParams.get("error");
+
+      // Si el enlace ha expirado o ha sido rechazado,
+      // NO debemos permitir el cambio de contraseña.
+      if (
+        error === "access_denied" ||
+        errorCode === "otp_expired"
+      ) {
+        setValidToken(false);
+        setError(
+          "El enlace de recuperación es inválido o ha expirado. Por favor solicita uno nuevo."
+        );
         setCheckingToken(false);
+        return;
       }
-    };
 
-    checkRecoverySession();
-  }, []);
+      // Una sesión normal NO es suficiente.
+      // Solo aceptamos una sesión creada mediante
+      // el flujo de recuperación de contraseña.
+      if (!isRecoverySession) {
+        setValidToken(false);
+        setError(
+          "El enlace de recuperación es inválido o ha expirado. Por favor solicita uno nuevo."
+        );
+        setCheckingToken(false);
+        return;
+      }
+
+      setValidToken(true);
+    } catch (err) {
+      console.error("[Auth] Error checking recovery session:", err);
+      setValidToken(false);
+      setError("Error al verificar el enlace de recuperación.");
+    } finally {
+      setCheckingToken(false);
+    }
+  };
+
+  checkRecoverySession();
+}, [isRecoverySession]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,8 +85,8 @@ export default function ResetPassword() {
     setSuccess(null);
 
     // Validations
-    if (form.password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres");
+    if (form.password.length < 10) {
+      setError("La contraseña debe tener al menos 10 caracteres");
       return;
     }
 
@@ -77,9 +106,11 @@ export default function ResetPassword() {
       }
 
       setSuccess("¡Contraseña actualizada exitosamente!");
-      setTimeout(() => {
-        setLocation("/auth");
-      }, 2000);
+
+setTimeout(async () => {
+  await signOut();
+  setLocation("/auth");
+}, 2000);
     } catch (err: any) {
       setError(err.message || "Error al actualizar la contraseña");
     } finally {

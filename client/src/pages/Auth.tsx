@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 type AuthMode = "login" | "register" | "forgot-password";
 
@@ -18,6 +19,7 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   // Login form
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
@@ -35,29 +37,42 @@ export default function Auth() {
   const [forgotForm, setForgotForm] = useState({ email: "" });
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
+  e.preventDefault();
+  setError(null);
+  setSuccess(null);
 
-    try {
-      const result = await signIn(loginForm.email, loginForm.password);
+  if (!captchaToken) {
+    setError(
+      "Completa la verificación de seguridad antes de iniciar sesión."
+    );
+    return;
+  }
 
-      if (!result.success) {
-        setError(result.error || "Error al iniciar sesión");
-        return;
-      }
+  setLoading(true);
 
-      setSuccess("¡Iniciaste sesión exitosamente!");
-      setTimeout(() => {
-        setLocation("/area-cliente");
-      }, 1500);
-    } catch (err: any) {
-      setError(err.message || "Error al iniciar sesión");
-    } finally {
-      setLoading(false);
+  try {
+    const result = await signIn(
+      loginForm.email,
+      loginForm.password,
+      captchaToken
+    );
+
+    if (!result.success) {
+      setError(result.error || "Error al iniciar sesión");
+      return;
     }
-  };
+
+    setSuccess("¡Iniciaste sesión exitosamente!");
+
+    setTimeout(() => {
+      setLocation("/area-cliente");
+    }, 1500);
+  } catch (err: any) {
+    setError(err.message || "Error al iniciar sesión");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,15 +90,19 @@ export default function Auth() {
       return;
     }
 
-    if (registerForm.password.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres");
-      return;
-    }
+    if (registerForm.password.length < 10) {
+  setError("La contraseña debe tener al menos 10 caracteres");
+  return;
+}
 
     if (registerForm.password !== registerForm.confirmPassword) {
       setError("Las contraseñas no coinciden");
       return;
     }
+    if (!captchaToken) {
+  setError("Completa la verificación de seguridad antes de registrarte.");
+  return;
+}
 
     setLoading(true);
 
@@ -98,11 +117,12 @@ console.log("[REGISTER] Datos enviados:", {
 
 
       const result = await signUp(
-        registerForm.email,
-        registerForm.password,
-        registerForm.nombre,
-        registerForm.empresa
-      );
+  registerForm.email,
+  registerForm.password,
+  registerForm.nombre,
+  registerForm.empresa,
+  captchaToken
+);
 
       if (!result.success) {
         setError(result.error || "Error al registrarse");
@@ -121,6 +141,7 @@ console.log("[REGISTER] Datos enviados:", {
           confirmPassword: "",
           empresa: "",
         });
+        setCaptchaToken(null);
       }, 2000);
     } catch (err: any) {
       setError(err.message || "Error al registrarse");
@@ -130,32 +151,51 @@ console.log("[REGISTER] Datos enviados:", {
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setLoading(true);
+  e.preventDefault();
+  setError(null);
+  setSuccess(null);
 
-    try {
-      const result = await resetPassword(forgotForm.email);
+  if (!captchaToken) {
+    setError(
+      "Completa la verificación de seguridad antes de solicitar la recuperación."
+    );
+    return;
+  }
 
-      if (!result.success) {
-        setError(result.error || "Error al solicitar recuperación de contraseña");
-        return;
-      }
+  setLoading(true);
 
-      setSuccess(
-        "Si existe una cuenta asociada a este correo, recibirás un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada y la carpeta de spam."
+  try {
+    const result = await resetPassword(
+      forgotForm.email,
+      captchaToken
+    );
+
+    if (!result.success) {
+      setError(
+        result.error ||
+          "Error al solicitar recuperación de contraseña"
       );
-      setTimeout(() => {
-        setMode("login");
-        setForgotForm({ email: "" });
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message || "Error al solicitar recuperación de contraseña");
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    setSuccess(
+      "Si existe una cuenta asociada a este correo, recibirás un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada y la carpeta de spam."
+    );
+
+    setTimeout(() => {
+      setMode("login");
+      setForgotForm({ email: "" });
+      setCaptchaToken(null);
+    }, 2000);
+  } catch (err: any) {
+    setError(
+      err.message ||
+        "Error al solicitar recuperación de contraseña"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-[#F5F7FA] to-white flex items-center justify-center p-4">
@@ -243,7 +283,25 @@ console.log("[REGISTER] Datos enviados:", {
                   </button>
                 </div>
               </div>
-
+              {/* CAPTCHA */}
+              <div className="flex justify-center pt-2">
+                <Turnstile
+                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                  onSuccess={(token) => {
+                    setCaptchaToken(token);
+                    setError(null);
+                  }}
+                  onExpire={() => {
+                    setCaptchaToken(null);
+                  }}
+                  onError={() => {
+                    setCaptchaToken(null);
+                    setError(
+                      "No se ha podido verificar el CAPTCHA. Inténtalo de nuevo."
+                    );
+                  }}
+                />
+              </div>
               <Button
                 type="submit"
                 className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
@@ -255,7 +313,10 @@ console.log("[REGISTER] Datos enviados:", {
               <div className="text-center space-y-2 pt-4">
                 <button
                   type="button"
-                  onClick={() => setMode("forgot-password")}
+                  onClick={() => {
+  setMode("forgot-password");
+  setCaptchaToken(null);
+}}
                   className="text-sm text-[#1E3A8A] hover:underline"
                   disabled={loading || authLoading}
                 >
@@ -265,7 +326,10 @@ console.log("[REGISTER] Datos enviados:", {
                   ¿No tienes cuenta?{" "}
                   <button
                     type="button"
-                    onClick={() => setMode("register")}
+                    onClick={() => {
+  setMode("register");
+  setCaptchaToken(null);
+}}
                     className="text-[#1E3A8A] hover:underline font-semibold"
                     disabled={loading || authLoading}
                   >
@@ -363,7 +427,22 @@ console.log("[REGISTER] Datos enviados:", {
                 </div>
                 <PasswordStrengthIndicator password={registerForm.password} />
               </div>
-
+<div className="flex justify-center pt-2">
+  <Turnstile
+    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+    onSuccess={(token) => {
+      setCaptchaToken(token);
+      setError(null);
+    }}
+    onExpire={() => {
+      setCaptchaToken(null);
+    }}
+    onError={() => {
+      setCaptchaToken(null);
+      setError("No se ha podido verificar el CAPTCHA. Inténtalo de nuevo.");
+    }}
+  />
+</div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Confirmar contraseña
@@ -421,47 +500,71 @@ console.log("[REGISTER] Datos enviados:", {
           )}
 
           {/* Forgot Password Form */}
-          {mode === "forgot-password" && (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Correo electrónico
-                </label>
-                <Input
-                  type="email"
-                  placeholder="tu@email.com"
-                  value={forgotForm.email}
-                  onChange={(e) =>
-                    setForgotForm({ email: e.target.value })
-                  }
-                  required
-                  disabled={loading || authLoading}
-                  className="w-full"
-                />
-              </div>
+{mode === "forgot-password" && (
+  <form onSubmit={handleForgotPassword} className="space-y-4">
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        Correo electrónico
+      </label>
 
-              <Button
-                type="submit"
-                className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
-                disabled={loading || authLoading}
-              >
-                {loading || authLoading
-                  ? "Enviando..."
-                  : "Enviar enlace de recuperación"}
-              </Button>
+      <Input
+        type="email"
+        placeholder="tu@email.com"
+        value={forgotForm.email}
+        onChange={(e) =>
+          setForgotForm({ email: e.target.value })
+        }
+        required
+        disabled={loading || authLoading}
+        className="w-full"
+      />
+    </div>
 
-              <p className="text-center text-sm text-gray-600 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setMode("login")}
-                  className="text-[#1E3A8A] hover:underline font-semibold"
-                  disabled={loading || authLoading}
-                >
-                  Volver al login
-                </button>
-              </p>
-            </form>
-          )}
+    {/* CAPTCHA */}
+    <div className="flex justify-center pt-2">
+      <Turnstile
+        siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+        onSuccess={(token) => {
+          setCaptchaToken(token);
+          setError(null);
+        }}
+        onExpire={() => {
+          setCaptchaToken(null);
+        }}
+        onError={() => {
+          setCaptchaToken(null);
+          setError(
+            "No se ha podido verificar el CAPTCHA. Inténtalo de nuevo."
+          );
+        }}
+      />
+    </div>
+
+    <Button
+      type="submit"
+      className="w-full bg-[#1E3A8A] hover:bg-[#1E3A8A]/90 text-white font-semibold py-2"
+      disabled={loading || authLoading}
+    >
+      {loading || authLoading
+        ? "Enviando..."
+        : "Enviar enlace de recuperación"}
+    </Button>
+
+    <p className="text-center text-sm text-gray-600 pt-4">
+      <button
+        type="button"
+        onClick={() => {
+          setMode("login");
+          setCaptchaToken(null);
+        }}
+        className="text-[#1E3A8A] hover:underline font-semibold"
+        disabled={loading || authLoading}
+      >
+        Volver al login
+      </button>
+    </p>
+  </form>
+)}
         </div>
       </Card>
     </div>

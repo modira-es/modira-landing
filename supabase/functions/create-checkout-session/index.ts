@@ -1,15 +1,49 @@
 import Stripe from "npm:stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const stripe = new Stripe(
-  Deno.env.get("STRIPE_SECRET_KEY")!,
-  {
-    apiVersion: "2025-08-27.basil",
-  }
+// ============================================================
+// STRIPE
+// ============================================================
+
+const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+
+if (!stripeSecretKey) {
+  throw new Error("STRIPE_SECRET_KEY no está configurada");
+}
+
+const stripe = new Stripe(stripeSecretKey, {
+  apiVersion: "2025-08-27.basil",
+});
+
+// ============================================================
+// SUPABASE
+// ============================================================
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+
+const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+const supabaseServiceRoleKey = Deno.env.get(
+  "SUPABASE_SERVICE_ROLE_KEY"
 );
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+if (!supabaseUrl) {
+  throw new Error("SUPABASE_URL no está configurada");
+}
+
+if (!supabaseAnonKey) {
+  throw new Error("SUPABASE_ANON_KEY no está configurada");
+}
+
+if (!supabaseServiceRoleKey) {
+  throw new Error(
+    "SUPABASE_SERVICE_ROLE_KEY no está configurada"
+  );
+}
+
+// ============================================================
+// CORS
+// ============================================================
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,31 +52,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/**
- * ============================================================
- * PREPARAR DESCRIPCIÓN DE FACTURA PARA STRIPE
- * ============================================================
- *
- * La columna invoices.descripcion puede contener:
- *
- * Título: Desarrollo web
- *
- * Descripción detallada: Desarrollo de una landing page
- *
- * Servicios incluidos:
- * - Diseño web | Cantidad: 1 | Precio: 20.00 €
- *
- * Notas: Entrega en 5 días
- *
- * Para Stripe mostramos únicamente la información relevante
- * para el cliente, eliminando cantidad y precio individual
- * porque Stripe ya muestra el importe total de la factura.
- */
+// ============================================================
+// PREPARAR DESCRIPCIÓN DE FACTURA PARA STRIPE
+// ============================================================
+
 const formatInvoiceDescriptionForStripe = (
   description: string | null,
   invoiceNumber: string,
   dueDate: string | null
-) => {
+): string => {
   if (!description || !description.trim()) {
     return dueDate
       ? `Pago de la factura ${invoiceNumber}\nVencimiento: ${new Date(
@@ -91,7 +109,7 @@ const formatInvoiceDescriptionForStripe = (
       .filter(Boolean)
       .map((line) => {
         /*
-         * Convertimos:
+         * Convierte:
          *
          * - Diseño web | Cantidad: 1 | Precio: 20.00 €
          *
@@ -99,9 +117,10 @@ const formatInvoiceDescriptionForStripe = (
          *
          * • Diseño web
          *
-         * El cliente no necesita ver el precio individual
-         * porque Stripe ya muestra el importe total.
+         * Stripe ya muestra el importe total,
+         * por lo que no mostramos el precio individual.
          */
+
         const serviceMatch = line.match(
           /^-\s*(.*?)\s*\|\s*Cantidad:\s*([^|]+)\s*\|\s*Precio:\s*(.+)$/i
         );
@@ -137,9 +156,9 @@ const formatInvoiceDescriptionForStripe = (
 
   /*
    * Si no hemos podido interpretar la estructura,
-   * mostramos la descripción original para no perder
-   * información del cliente.
+   * conservamos la descripción original.
    */
+
   if (sections.length === 0) {
     return dueDate
       ? `${text}\nVencimiento: ${new Date(
@@ -151,9 +170,53 @@ const formatInvoiceDescriptionForStripe = (
   return sections.join("\n\n");
 };
 
+// ============================================================
+// OBTENER TÍTULO DE FACTURA
+// ============================================================
+
+const getInvoiceTitle = (
+  description: string | null,
+  invoiceNumber: string
+): string => {
+  const text = description?.trim() || "";
+
+  const titleMatch = text.match(
+    /Título:\s*(.*?)(?=\n|Descripción detallada:|Servicios incluidos:|Notas:|$)/i
+  );
+
+  const title = titleMatch?.[1]?.trim();
+
+  return title || `Factura ${invoiceNumber}`;
+};
+
+// ============================================================
+// OBTENER DESCRIPCIÓN CORTA DE FACTURA
+// ============================================================
+
+const getInvoiceDetail = (
+  description: string | null
+): string => {
+  const text = description?.trim() || "";
+
+  const detailMatch = text.match(
+    /Descripción detallada:\s*(.*?)(?=\n|Servicios incluidos:|Notas:|$)/i
+  );
+
+  const detail = detailMatch?.[1]?.trim();
+
+  return (
+    detail ||
+    "Pago correspondiente a esta factura."
+  );
+};
+
+// ============================================================
+// EDGE FUNCTION
+// ============================================================
+
 Deno.serve(async (req) => {
   // ==========================================================
-  // CORS
+  // 1. CORS
   // ==========================================================
 
   if (req.method === "OPTIONS") {
@@ -179,7 +242,7 @@ Deno.serve(async (req) => {
 
   try {
     // ========================================================
-    // 1. CLIENTE SUPABASE CON EL TOKEN DEL USUARIO
+    // 2. AUTHORIZATION
     // ========================================================
 
     const authHeader = req.headers.get("Authorization");
@@ -199,6 +262,19 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================
+    // 3. CLIENTE SUPABASE CON TOKEN DEL USUARIO
+    // ========================================================
+    //
+    // Este cliente respeta las RLS.
+    //
+    // Se utiliza para:
+    //
+    // - comprobar la sesión
+    // - comprobar ownership de la factura
+    //
+    // ========================================================
+
     const supabase = createClient(
       supabaseUrl,
       supabaseAnonKey,
@@ -212,7 +288,32 @@ Deno.serve(async (req) => {
     );
 
     // ========================================================
-    // 2. USUARIO ACTUAL
+    // 4. CLIENTE SERVICE ROLE
+    // ========================================================
+    //
+    // SOLO SERVER-SIDE.
+    //
+    // NO se envía al navegador.
+    //
+    // Se utiliza únicamente para consultar el estado real
+    // del perfil porque un usuario bloqueado puede tener una
+    // RLS que le impida leer su propio perfil.
+    //
+    // ========================================================
+
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      supabaseServiceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    // ========================================================
+    // 5. USUARIO ACTUAL
     // ========================================================
 
     const {
@@ -223,6 +324,11 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
+      console.error(
+        "Error verificando usuario:",
+        userError
+      );
+
       return new Response(
         JSON.stringify({
           error: "Sesión no válida",
@@ -238,14 +344,141 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================
-    // 3. BODY
+    // 6. COMPROBAR ESTADO DEL PERFIL
+    // ========================================================
+    //
+    // SEGURIDAD H-05
+    //
+    // IMPORTANTE:
+    //
+    // NO usamos aquí el cliente normal "supabase".
+    //
+    // Usamos "supabaseAdmin" porque un usuario bloqueado puede
+    // recibir 403 de RLS al intentar leer profiles.
+    //
+    // La decisión de bloqueo se toma en backend.
+    //
     // ========================================================
 
-    const body = await req.json();
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select("id, status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error(
+        "Error obteniendo estado del perfil:",
+        profileError
+      );
+
+      return new Response(
+        JSON.stringify({
+          error:
+            "No se ha podido verificar el estado de la cuenta",
+        }),
+        {
+          status: 500,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // ========================================================
+    // 7. FAIL-CLOSED SI NO EXISTE PERFIL
+    // ========================================================
+
+    if (!profile) {
+      console.error(
+        "No existe perfil para el usuario:",
+        user.id
+      );
+
+      return new Response(
+        JSON.stringify({
+          error:
+            "No se ha podido verificar la cuenta",
+        }),
+        {
+          status: 403,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // ========================================================
+    // 8. BLOQUEO DE CUENTA
+    // ========================================================
+
+    const profileStatus = String(
+      profile.status ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (profileStatus === "blocked") {
+      console.warn(
+        "Intento de pago de usuario bloqueado:",
+        user.id
+      );
+
+      return new Response(
+        JSON.stringify({
+          error:
+            "Tu cuenta está bloqueada y no puede realizar pagos",
+        }),
+        {
+          status: 403,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // ========================================================
+    // 9. BODY
+    // ========================================================
+
+    let body: unknown;
+
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({
+          error: "El cuerpo de la petición no es JSON válido",
+        }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    // ========================================================
+    // 10. INVOICE ID
+    // ========================================================
 
     const invoiceId =
-      typeof body?.invoice_id === "string"
-        ? body.invoice_id.trim()
+      typeof (body as Record<string, unknown>)?.invoice_id ===
+      "string"
+        ? String(
+            (body as Record<string, unknown>).invoice_id
+          ).trim()
         : "";
 
     if (!invoiceId) {
@@ -264,7 +497,24 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================
-    // 4. OBTENER FACTURA
+    // 11. OBTENER FACTURA
+    // ========================================================
+    //
+    // IMPORTANTE:
+    //
+    // Seguimos utilizando el cliente normal del usuario.
+    //
+    // La consulta exige:
+    //
+    //     invoice.id = invoiceId
+    //
+    // Y:
+    //
+    //     invoice.user_id = user.id
+    //
+    // Por tanto, el cliente NO puede solicitar una factura
+    // perteneciente a otro usuario.
+    //
     // ========================================================
 
     const {
@@ -308,6 +558,10 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================
+    // 12. FACTURA NO EXISTE / NO PERTENECE AL USUARIO
+    // ========================================================
+
     if (!invoice) {
       return new Response(
         JSON.stringify({
@@ -325,7 +579,7 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================
-    // 5. COMPROBAR ESTADO
+    // 13. ESTADO DE LA FACTURA
     // ========================================================
     //
     // PAGADA:
@@ -335,7 +589,7 @@ Deno.serve(async (req) => {
     //   Se puede pagar.
     //
     // VENCIDA:
-    //   TAMBIÉN se puede pagar.
+    //   También se puede pagar.
     //
     // CANCELADA:
     //   No se puede pagar.
@@ -380,16 +634,18 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================
-    // 6. IMPORTE REAL
+    // 14. IMPORTE REAL
     // ========================================================
     //
-    // invoices.importe_a_pagar está en EUROS.
+    // El importe NO viene del frontend.
     //
-    // Stripe trabaja en céntimos.
+    // Se obtiene directamente de:
     //
-    // 1210.50 €
-    //     ↓
-    // 121050
+    //     invoices.importe_a_pagar
+    //
+    // Esto coincide con el diseño fiscal de MODIRA:
+    //
+    // importe_a_pagar = monto - irpf_importe
     //
     // ========================================================
 
@@ -416,12 +672,32 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================
+    // 15. EUROS → CÉNTIMOS
+    // ========================================================
+
     const amountInCents = Math.round(
       amountInEuros * 100
     );
 
+    if (amountInCents <= 0) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "El importe calculado para Stripe no es válido",
+        }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
     // ========================================================
-    // 7. URLS
+    // 16. APP URL
     // ========================================================
 
     const appUrl =
@@ -429,7 +705,7 @@ Deno.serve(async (req) => {
       "http://localhost:5173";
 
     // ========================================================
-    // 8. DESCRIPCIÓN PARA STRIPE
+    // 17. DESCRIPCIÓN PARA STRIPE
     // ========================================================
 
     const stripeDescription =
@@ -440,54 +716,35 @@ Deno.serve(async (req) => {
       );
 
     // ========================================================
-    // 9. CREAR CHECKOUT SESSION
+    // 18. CREAR CHECKOUT SESSION
     // ========================================================
 
     const session =
       await stripe.checkout.sessions.create({
         mode: "payment",
 
-       line_items: [
-  {
-    price_data: {
-      currency: "eur",
+        line_items: [
+          {
+            price_data: {
+              currency: "eur",
 
-      product_data: {
-        name: (() => {
-          const description = invoice.descripcion?.trim() || "";
+              product_data: {
+                name: getInvoiceTitle(
+                  invoice.descripcion,
+                  invoice.numero_factura
+                ),
 
-          const titleMatch = description.match(
-            /Título:\s*(.*?)(?=\n|Descripción detallada:|Servicios incluidos:|Notas:|$)/i
-          );
+                description: getInvoiceDetail(
+                  invoice.descripcion
+                ),
+              },
 
-          const title = titleMatch?.[1]?.trim();
+              unit_amount: amountInCents,
+            },
 
-          return title || `Factura ${invoice.numero_factura}`;
-        })(),
-
-        description: (() => {
-          const description = invoice.descripcion?.trim() || "";
-
-          const detailMatch = description.match(
-            /Descripción detallada:\s*(.*?)(?=\n|Servicios incluidos:|Notas:|$)/i
-          );
-
-          const detail = detailMatch?.[1]?.trim();
-
-          if (detail) {
-            return detail;
-          }
-
-          return "Pago correspondiente a esta factura.";
-        })(),
-      },
-
-      unit_amount: amountInCents,
-    },
-
-    quantity: 1,
-  },
-],
+            quantity: 1,
+          },
+        ],
 
         metadata: {
           invoice_id: invoice.id,
@@ -504,17 +761,17 @@ Deno.serve(async (req) => {
         },
 
         success_url:
-  `${appUrl}/area-cliente/facturacion?payment=success&invoice_id=${invoice.id}`,
+          `${appUrl}/area-cliente/facturacion?payment=success&invoice_id=${invoice.id}`,
 
-cancel_url:
-  `${appUrl}/area-cliente/facturacion?payment=cancelled&invoice_id=${invoice.id}`,
+        cancel_url:
+          `${appUrl}/area-cliente/facturacion?payment=cancelled&invoice_id=${invoice.id}`,
 
         customer_email:
           user.email || undefined,
       });
 
     // ========================================================
-    // 10. RESPUESTA
+    // 19. COMPROBAR URL
     // ========================================================
 
     if (!session.url) {
@@ -522,6 +779,10 @@ cancel_url:
         "Stripe no ha devuelto una URL de Checkout"
       );
     }
+
+    // ========================================================
+    // 20. RESPUESTA
+    // ========================================================
 
     return new Response(
       JSON.stringify({
