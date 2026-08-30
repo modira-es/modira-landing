@@ -58,6 +58,10 @@ const GLOBAL_AI_RATE_LIMIT = 100;
 
 const GLOBAL_AI_RATE_WINDOW_SECONDS = 60 * 60;
 
+const USER_RATE_LIMIT = 20;
+
+const USER_RATE_WINDOW_SECONDS = 60 * 60;
+
 
 // ============================================================
 // OPENAI
@@ -1525,6 +1529,105 @@ Deno.serve(
 
 
     // ========================================================
+    // AUTENTICACIÓN DEL USUARIO
+    // ========================================================
+
+    const authHeader = req.headers.get("Authorization");
+
+    if (!authHeader || !/^Bearer\s+\S+$/i.test(authHeader)) {
+      return jsonResponse(
+        {
+          error: "Se requiere una sesión autenticada.",
+        },
+        401,
+        origin
+      );
+    }
+
+    let userId: string;
+
+    try {
+      const userResponse = await fetch(
+        `${supabaseUrl}/auth/v1/user`,
+        {
+          headers: {
+            apikey: supabaseServiceRoleKey,
+            Authorization: authHeader,
+          },
+        }
+      );
+
+      if (!userResponse.ok) {
+        return jsonResponse(
+          {
+            error: "Sesión no válida.",
+          },
+          401,
+          origin
+        );
+      }
+
+      const authUser = await parseJsonResponse<{ id?: unknown }>(
+        userResponse
+      );
+
+      if (!authUser || !isValidUuid(authUser.id)) {
+        return jsonResponse(
+          {
+            error: "Sesión no válida.",
+          },
+          401,
+          origin
+        );
+      }
+
+      userId = authUser.id;
+    } catch (error) {
+      console.error(
+        "MODIRA AI: error verificando la sesión.",
+        error instanceof Error ? error.message : "unknown error"
+      );
+
+      return jsonResponse(
+        {
+          error: "No se ha podido verificar la sesión.",
+        },
+        503,
+        origin
+      );
+    }
+
+    const profiles = await supabaseRequest<
+      Array<{ id: string; status: string | null }>
+    >(
+      supabaseUrl,
+      supabaseServiceRoleKey,
+      `profiles?id=eq.${encodeURIComponent(userId)}&select=id,status&limit=1`
+    );
+
+    const profile = Array.isArray(profiles) ? profiles[0] : null;
+
+    if (!profile) {
+      return jsonResponse(
+        {
+          error: "No se ha podido verificar la cuenta.",
+        },
+        403,
+        origin
+      );
+    }
+
+    if (String(profile.status ?? "").trim().toLowerCase() !== "active") {
+      return jsonResponse(
+        {
+          error: "Tu cuenta no está activa.",
+        },
+        403,
+        origin
+      );
+    }
+
+    // ========================================================
     // LEER BODY COMO BYTES
     // ========================================================
 
@@ -1763,6 +1866,45 @@ Deno.serve(
     try {
 
       // ======================================================
+      // RATE LIMIT — USUARIO
+      // ======================================================
+
+      try {
+        const userRate = await consumeAiRateLimit(
+          supabaseUrl,
+          supabaseServiceRoleKey,
+          `user:${userId}`,
+          USER_RATE_LIMIT,
+          USER_RATE_WINDOW_SECONDS
+        );
+
+        if (!userRate.allowed) {
+          return jsonResponse(
+            {
+              error: "Has alcanzado temporalmente el límite de Modira AI.",
+              retryAfterSeconds: userRate.retry_after_seconds,
+              remaining: userRate.remaining,
+            },
+            429,
+            origin
+          );
+        }
+      } catch (error) {
+        console.error(
+          "MODIRA AI: error en rate limit de usuario.",
+          error instanceof Error ? error.message : "unknown error"
+        );
+
+        return jsonResponse(
+          {
+            error: "Modira AI no está disponible temporalmente.",
+          },
+          503,
+          origin
+        );
+      }
+
+      // ======================================================
       // RATE LIMIT — GLOBAL
       // ======================================================
       //
@@ -1842,7 +1984,7 @@ Deno.serve(
             supabaseUrl,
             supabaseServiceRoleKey,
 
-            `session:${sessionId}`,
+            `session:${userId}:${sessionId}`,
 
             SESSION_RATE_LIMIT,
             SESSION_RATE_WINDOW_SECONDS
@@ -1970,7 +2112,7 @@ Deno.serve(
         await getOrCreateConversation(
           supabaseUrl,
           supabaseServiceRoleKey,
-          sessionId
+          `${userId}:${sessionId}`
         );
 
 

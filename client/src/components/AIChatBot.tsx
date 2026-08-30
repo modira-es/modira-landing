@@ -348,6 +348,22 @@ export function AIChatBot() {
       return;
     }
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          role: "assistant",
+          content:
+            "Necesitas iniciar sesión para utilizar Modira AI.",
+        },
+      ]);
+      return;
+    }
+
 
     // ----------------------------------------------------------
     // MENSAJE DEL USUARIO
@@ -394,6 +410,9 @@ export function AIChatBot() {
         await supabase.functions.invoke(
           "modira-ai",
           {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
             body: {
               messages:
                 updatedMessages.filter(
