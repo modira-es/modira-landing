@@ -13,6 +13,7 @@
 // - sessionId validado como UUID
 // - Rate limiting persistente mediante RPC de Supabase
 // - Rate limiting atómico por sesión e IP
+// - Rate limiting global de la IA
 // - Límite de concurrencia por sesión
 // - Timeout de OpenAI
 // - Logs sin contenido de conversaciones
@@ -51,6 +52,11 @@ const SESSION_RATE_WINDOW_SECONDS = 60 * 60;
 const IP_RATE_LIMIT = 20;
 
 const IP_RATE_WINDOW_SECONDS = 24 * 60 * 60;
+
+// Límite global de todas las solicitudes válidas de Modira AI.
+const GLOBAL_AI_RATE_LIMIT = 100;
+
+const GLOBAL_AI_RATE_WINDOW_SECONDS = 60 * 60;
 
 
 // ============================================================
@@ -146,18 +152,6 @@ function jsonResponse(
 // ============================================================
 // PARSER JSON SEGURO
 // ============================================================
-//
-// IMPORTANTE:
-//
-// Nunca utilizamos response.json() directamente.
-//
-// Algunas respuestas HTTP pueden tener el cuerpo vacío.
-// En ese caso JSON.parse("") produce:
-//
-// Unexpected end of JSON input
-//
-// Esta función permite controlar explícitamente ese caso.
-//
 
 async function parseJsonResponse<T>(
   response: Response
@@ -1156,17 +1150,6 @@ async function callOpenAI(
       );
     }
 
-    // ========================================================
-    // IMPORTANTE
-    // ========================================================
-    //
-    // NO usamos response.json().
-    //
-    // Utilizamos el parser seguro para evitar:
-    //
-    // Unexpected end of JSON input
-    //
-
     const data =
       await parseJsonResponse<unknown>(
         response
@@ -1304,7 +1287,6 @@ function parseCompanyExtraction(
   let cleaned =
     text.trim();
 
-  // Eliminar posibles bloques markdown.
   if (
     cleaned.startsWith("```json")
   ) {
@@ -1781,6 +1763,76 @@ Deno.serve(
     try {
 
       // ======================================================
+      // RATE LIMIT — GLOBAL
+      // ======================================================
+      //
+      // Este límite protege el servicio completo.
+      //
+      // Es persistente y atómico porque utiliza la RPC
+      // de Supabase.
+      //
+      // Solo se consume después de validar completamente
+      // la petición, evitando que peticiones malformadas
+      // gasten el cupo global.
+      //
+      // ======================================================
+
+      try {
+        const globalRate =
+          await consumeAiRateLimit(
+            supabaseUrl,
+            supabaseServiceRoleKey,
+
+            "global:modira-ai",
+
+            GLOBAL_AI_RATE_LIMIT,
+            GLOBAL_AI_RATE_WINDOW_SECONDS
+          );
+
+        if (
+          !globalRate.allowed
+        ) {
+          return jsonResponse(
+            {
+              error:
+                "Modira AI está temporalmente saturada. Inténtalo de nuevo más tarde.",
+
+              retryAfterSeconds:
+                globalRate.retry_after_seconds,
+
+              remaining:
+                globalRate.remaining,
+            },
+
+            429,
+
+            origin
+          );
+        }
+
+      } catch (error) {
+        console.error(
+          "MODIRA AI: error en rate limit global.",
+
+          error instanceof Error
+            ? error.message
+            : "unknown error"
+        );
+
+        return jsonResponse(
+          {
+            error:
+              "Modira AI no está disponible temporalmente.",
+          },
+
+          503,
+
+          origin
+        );
+      }
+
+
+      // ======================================================
       // RATE LIMIT — SESSION
       // ======================================================
 
@@ -1793,7 +1845,6 @@ Deno.serve(
             `session:${sessionId}`,
 
             SESSION_RATE_LIMIT,
-
             SESSION_RATE_WINDOW_SECONDS
           );
 
@@ -1856,7 +1907,6 @@ Deno.serve(
             `ip:${clientIp}`,
 
             IP_RATE_LIMIT,
-
             IP_RATE_WINDOW_SECONDS
           );
 
@@ -2038,16 +2088,6 @@ Deno.serve(
       // ======================================================
       // EXTRAER INFORMACIÓN DE EMPRESA
       // ======================================================
-      //
-      // IMPORTANTE:
-      //
-      // Esta parte es OPCIONAL.
-      //
-      // Si OpenAI devuelve una respuesta vacía,
-      // JSON inválido, timeout o cualquier otro error,
-      // NO se rompe la respuesta principal del chatbot.
-      //
-      // ======================================================
 
       const userOnlyHistory =
         historyForOpenAI.filter(
@@ -2110,13 +2150,6 @@ Deno.serve(
           }
 
         } catch (error) {
-          // ==================================================
-          // MUY IMPORTANTE:
-          //
-          // Un fallo en la extracción NO debe impedir
-          // que el usuario reciba la respuesta del chat.
-          // ==================================================
-
           console.error(
             "MODIRA AI: extracción de empresa fallida.",
 
