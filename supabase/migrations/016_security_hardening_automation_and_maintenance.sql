@@ -1365,4 +1365,536 @@ BEGIN
 END $$;
 
 
+-- ============================================================
+-- 28. CIERRE DE RUTAS RESIDUALES DE CUENTAS BLOQUEADAS
+-- ============================================================
+--
+-- Las migraciones 003, 006, 013 y 014 conservaban algunas rutas
+-- basadas exclusivamente en user_id. Aunque current_user_company_id()
+-- ya devuelve NULL para cuentas bloqueadas, esas rutas no dependen de
+-- company_id y, por tanto, requieren una comprobación explícita del
+-- estado de la cuenta.
+--
+-- Esta sección completa el objetivo transversal de 016: una cuenta
+-- bloqueada no puede consultar ni crear recursos protegidos, incluso
+-- cuando el recurso histórico pertenezca directamente a auth.uid().
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 28.1 PROYECTOS
+-- ------------------------------------------------------------
+
+DROP POLICY IF EXISTS projects_select_policy
+ON public.projects;
+
+CREATE POLICY projects_select_policy
+ON public.projects
+FOR SELECT
+TO authenticated
+USING (
+    public.current_user_is_worker()
+    OR (
+        public.current_user_is_active()
+        AND NOT public.current_user_is_worker()
+        AND user_id = auth.uid()
+    )
+);
+
+
+DROP POLICY IF EXISTS projects_insert_policy
+ON public.projects;
+
+CREATE POLICY projects_insert_policy
+ON public.projects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    public.current_user_is_active()
+    AND NOT public.current_user_is_worker()
+    AND user_id = auth.uid()
+    AND (
+        (
+            public.current_user_company_id() IS NOT NULL
+            AND company_id = public.current_user_company_id()
+        )
+        OR (
+            public.current_user_company_id() IS NULL
+            AND company_id IS NULL
+        )
+    )
+    AND estado IN (
+        'Pendiente',
+        'Activo',
+        'Pausado',
+        'Entregado',
+        'Completado'
+    )
+);
+
+
+CREATE OR REPLACE FUNCTION public.create_project(
+    p_descripcion TEXT,
+    p_fecha_inicio TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    p_fecha_fin TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS public.projects
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_project public.projects;
+    v_company_id UUID;
+    v_fecha_inicio TIMESTAMPTZ;
+BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Usuario no autenticado';
+    END IF;
+
+    IF NOT public.current_user_is_active() THEN
+        RAISE EXCEPTION 'Acceso denegado: la cuenta está bloqueada';
+    END IF;
+
+    IF public.current_user_is_worker() THEN
+        RAISE EXCEPTION 'Los trabajadores no pueden crear proyectos mediante create_project()';
+    END IF;
+
+    IF p_descripcion IS NULL OR TRIM(p_descripcion) = '' THEN
+        RAISE EXCEPTION 'La descripción del proyecto es obligatoria';
+    END IF;
+
+    v_fecha_inicio := COALESCE(p_fecha_inicio, CURRENT_TIMESTAMP);
+
+    IF p_fecha_fin IS NOT NULL AND p_fecha_fin < v_fecha_inicio THEN
+        RAISE EXCEPTION 'La fecha de fin no puede ser anterior a la fecha de inicio';
+    END IF;
+
+    v_company_id := public.current_user_company_id();
+
+    INSERT INTO public.projects (
+        user_id,
+        company_id,
+        nombre,
+        descripcion,
+        estado,
+        fecha_inicio,
+        fecha_fin
+    )
+    VALUES (
+        auth.uid(),
+        v_company_id,
+        'Proyecto sin título',
+        TRIM(p_descripcion),
+        'Pendiente',
+        v_fecha_inicio,
+        p_fecha_fin
+    )
+    RETURNING * INTO v_project;
+
+    RETURN v_project;
+END;
+$$;
+
+REVOKE ALL
+ON FUNCTION public.create_project(TEXT, TIMESTAMPTZ, TIMESTAMPTZ)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE
+ON FUNCTION public.create_project(TEXT, TIMESTAMPTZ, TIMESTAMPTZ)
+TO authenticated;
+
+
+-- ------------------------------------------------------------
+-- 28.2 SOLICITUDES Y DOCUMENTOS DE PROYECTO
+-- ------------------------------------------------------------
+
+DROP POLICY IF EXISTS project_change_requests_select
+ON public.project_change_requests;
+
+CREATE POLICY project_change_requests_select
+ON public.project_change_requests
+FOR SELECT
+TO authenticated
+USING (
+    public.current_user_is_worker()
+    OR (
+        public.current_user_is_active()
+        AND NOT public.current_user_is_worker()
+        AND EXISTS (
+            SELECT 1
+            FROM public.projects p
+            WHERE p.id = project_change_requests.project_id
+              AND p.user_id = auth.uid()
+        )
+    )
+);
+
+
+CREATE OR REPLACE FUNCTION public.request_project_change(
+    p_project_id UUID,
+    p_description TEXT
+)
+RETURNS public.project_change_requests
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_project public.projects;
+    v_request public.project_change_requests;
+BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Usuario no autenticado';
+    END IF;
+
+    IF NOT public.current_user_is_active() THEN
+        RAISE EXCEPTION 'Acceso denegado: la cuenta está bloqueada';
+    END IF;
+
+    IF public.current_user_is_worker() THEN
+        RAISE EXCEPTION 'Los trabajadores no pueden crear solicitudes de cambio de cliente';
+    END IF;
+
+    IF p_project_id IS NULL THEN
+        RAISE EXCEPTION 'El proyecto es obligatorio';
+    END IF;
+
+    IF p_description IS NULL OR btrim(p_description) = '' THEN
+        RAISE EXCEPTION 'La descripción del cambio es obligatoria';
+    END IF;
+
+    IF length(p_description) > 5000 THEN
+        RAISE EXCEPTION 'La descripción del cambio no puede superar 5000 caracteres';
+    END IF;
+
+    SELECT *
+    INTO v_project
+    FROM public.projects
+    WHERE id = p_project_id
+      AND user_id = auth.uid()
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'El proyecto no existe o no pertenece al usuario autenticado';
+    END IF;
+
+    IF v_project.change_requests_enabled IS NOT TRUE THEN
+        RAISE EXCEPTION 'Las solicitudes de cambio no están habilitadas para este proyecto';
+    END IF;
+
+    IF v_project.change_requests_deadline IS NULL THEN
+        RAISE EXCEPTION 'El proyecto no tiene una fecha límite de solicitudes configurada';
+    END IF;
+
+    IF CURRENT_TIMESTAMP > v_project.change_requests_deadline THEN
+        RAISE EXCEPTION 'El periodo para solicitar cambios ha finalizado';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.project_change_requests r
+        WHERE r.project_id = v_project.id
+          AND r.status IN ('pending', 'in_review', 'accepted')
+    ) THEN
+        RAISE EXCEPTION 'Este proyecto ya tiene una solicitud de cambio en curso';
+    END IF;
+
+    INSERT INTO public.project_change_requests (
+        project_id,
+        user_id,
+        company_id,
+        client_id,
+        description,
+        status
+    )
+    VALUES (
+        v_project.id,
+        auth.uid(),
+        v_project.company_id,
+        v_project.client_id,
+        btrim(p_description),
+        'pending'
+    )
+    RETURNING * INTO v_request;
+
+    INSERT INTO public.activity_log (
+        user_id,
+        company_id,
+        action,
+        resource_type,
+        resource_id,
+        description,
+        metadata
+    )
+    VALUES (
+        auth.uid(),
+        v_project.company_id,
+        'project.change_request_created',
+        'project_change_request',
+        v_request.id,
+        'El cliente ha solicitado un cambio en el proyecto',
+        jsonb_build_object(
+            'project_id', v_project.id,
+            'description', v_request.description
+        )
+    );
+
+    RETURN v_request;
+END;
+$$;
+
+REVOKE ALL
+ON FUNCTION public.request_project_change(UUID, TEXT)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE
+ON FUNCTION public.request_project_change(UUID, TEXT)
+TO authenticated;
+
+
+DROP POLICY IF EXISTS project_documents_select
+ON public.project_documents;
+
+CREATE POLICY project_documents_select
+ON public.project_documents
+FOR SELECT
+TO authenticated
+USING (
+    public.current_user_is_worker()
+    OR (
+        public.current_user_is_active()
+        AND NOT public.current_user_is_worker()
+        AND EXISTS (
+            SELECT 1
+            FROM public.projects p
+            WHERE p.id = project_documents.project_id
+              AND p.user_id = auth.uid()
+        )
+    )
+);
+
+
+DROP POLICY IF EXISTS project_documents_storage_client_select
+ON storage.objects;
+
+CREATE POLICY project_documents_storage_client_select
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+    bucket_id = 'project-documents'
+    AND public.current_user_is_active()
+    AND NOT public.current_user_is_worker()
+    AND EXISTS (
+        SELECT 1
+        FROM public.project_documents d
+        JOIN public.projects p
+          ON p.id = d.project_id
+        WHERE d.storage_path = storage.objects.name
+          AND p.user_id = auth.uid()
+    )
+);
+
+
+-- ------------------------------------------------------------
+-- 28.3 SOPORTE Y REGISTRO DE ACTIVIDAD
+-- ------------------------------------------------------------
+
+DROP POLICY IF EXISTS support_tickets_client_select
+ON public.support_tickets;
+
+CREATE POLICY support_tickets_client_select
+ON public.support_tickets
+FOR SELECT
+TO authenticated
+USING (
+    public.current_user_is_active()
+    AND NOT public.current_user_is_worker()
+    AND (
+        (
+            company_id IS NOT NULL
+            AND company_id = public.current_user_company_id()
+        )
+        OR (
+            company_id IS NULL
+            AND user_id = auth.uid()
+        )
+    )
+);
+
+
+DROP POLICY IF EXISTS support_tickets_client_insert
+ON public.support_tickets;
+
+CREATE POLICY support_tickets_client_insert
+ON public.support_tickets
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    public.current_user_is_active()
+    AND NOT public.current_user_is_worker()
+    AND user_id = auth.uid()
+    AND (
+        company_id IS NULL
+        OR company_id = public.current_user_company_id()
+    )
+);
+
+
+DROP POLICY IF EXISTS activity_log_client_select
+ON public.activity_log;
+
+CREATE POLICY activity_log_client_select
+ON public.activity_log
+FOR SELECT
+TO authenticated
+USING (
+    public.current_user_is_active()
+    AND NOT public.current_user_is_worker()
+    AND (
+        (
+            company_id IS NOT NULL
+            AND company_id = public.current_user_company_id()
+        )
+        OR (
+            company_id IS NULL
+            AND user_id = auth.uid()
+        )
+    )
+);
+
+
+CREATE OR REPLACE FUNCTION public.log_activity(
+    p_action TEXT,
+    p_resource_type TEXT,
+    p_resource_id UUID DEFAULT NULL,
+    p_description TEXT DEFAULT NULL,
+    p_metadata JSONB DEFAULT NULL
+)
+RETURNS public.activity_log
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_company_id UUID;
+    v_activity public.activity_log;
+BEGIN
+    v_user_id := auth.uid();
+
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Usuario no autenticado';
+    END IF;
+
+    IF NOT public.current_user_is_active() THEN
+        RAISE EXCEPTION 'Acceso denegado: la cuenta está bloqueada';
+    END IF;
+
+    IF public.current_user_is_worker() THEN
+        v_company_id := NULL;
+    ELSE
+        v_company_id := public.current_user_company_id();
+    END IF;
+
+    IF p_action IS NULL OR TRIM(p_action) = '' THEN
+        RAISE EXCEPTION 'La acción es obligatoria';
+    END IF;
+
+    IF p_resource_type IS NULL OR TRIM(p_resource_type) = '' THEN
+        RAISE EXCEPTION 'El tipo de recurso es obligatorio';
+    END IF;
+
+    INSERT INTO public.activity_log (
+        user_id,
+        company_id,
+        action,
+        resource_type,
+        resource_id,
+        description,
+        metadata
+    )
+    VALUES (
+        v_user_id,
+        v_company_id,
+        TRIM(p_action),
+        TRIM(p_resource_type),
+        p_resource_id,
+        p_description,
+        p_metadata
+    )
+    RETURNING * INTO v_activity;
+
+    RETURN v_activity;
+END;
+$$;
+
+REVOKE ALL
+ON FUNCTION public.log_activity(TEXT, TEXT, UUID, TEXT, JSONB)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE
+ON FUNCTION public.log_activity(TEXT, TEXT, UUID, TEXT, JSONB)
+TO authenticated;
+
+
+-- ------------------------------------------------------------
+-- 28.4 VALIDACIONES ADICIONALES
+-- ------------------------------------------------------------
+
+DO $$
+DECLARE
+    v_count INTEGER;
+BEGIN
+    SELECT COUNT(*)
+    INTO v_count
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND (
+          (tablename = 'projects' AND policyname IN (
+              'projects_select_policy',
+              'projects_insert_policy'
+          ))
+          OR
+          (tablename = 'project_change_requests' AND policyname =
+              'project_change_requests_select')
+          OR
+          (tablename = 'project_documents' AND policyname =
+              'project_documents_select')
+          OR
+          (tablename = 'support_tickets' AND policyname IN (
+              'support_tickets_client_select',
+              'support_tickets_client_insert'
+          ))
+          OR
+          (tablename = 'activity_log' AND policyname =
+              'activity_log_client_select')
+      );
+
+    IF v_count <> 8 THEN
+        RAISE EXCEPTION
+            '016 failed: account-status hardening policies incomplete';
+    END IF;
+
+    IF to_regprocedure(
+        'public.create_project(text,timestamp with time zone,timestamp with time zone)'
+    ) IS NULL THEN
+        RAISE EXCEPTION '016 failed: create_project() missing';
+    END IF;
+
+    IF to_regprocedure(
+        'public.request_project_change(uuid,text)'
+    ) IS NULL THEN
+        RAISE EXCEPTION '016 failed: request_project_change() missing';
+    END IF;
+
+    IF to_regprocedure(
+        'public.log_activity(text,text,uuid,text,jsonb)'
+    ) IS NULL THEN
+        RAISE EXCEPTION '016 failed: log_activity() missing';
+    END IF;
+END $$;
+
+
 COMMIT;
