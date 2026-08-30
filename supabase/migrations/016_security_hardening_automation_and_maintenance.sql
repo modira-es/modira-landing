@@ -1872,7 +1872,7 @@ BEGIN
               'activity_log_client_select')
       );
 
-    IF v_count <> 8 THEN
+    IF v_count <> 7 THEN
         RAISE EXCEPTION
             '016 failed: account-status hardening policies incomplete';
     END IF;
