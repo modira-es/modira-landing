@@ -1,7 +1,18 @@
 import { z } from "zod";
 import { router, adminProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { supabase } from "../lib/supabase";
+
+type AdminProfileRow = {
+  id: string;
+  nombre: string | null;
+  email: string | null;
+  empresa: string | null;
+  company_id: string | null;
+  rol: string | null;
+  status: string;
+  created_at: string;
+  fecha_ultimo_login: string | null;
+};
 
 export const adminRouter = router({
   /**
@@ -10,12 +21,10 @@ export const adminRouter = router({
    * Protegido exclusivamente mediante adminProcedure.
    * La comprobación de administrador se realiza en el servidor.
    */
-  getUsers: adminProcedure.query(async () => {
+  getUsers: adminProcedure.query(async ({ ctx }) => {
     try {
-      const { data: users, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const { data: users, error } = await ctx.supabase.rpc("admin_list_profiles");
+      const profileRows = (users ?? []) as AdminProfileRow[];
 
       if (error) {
         console.error("Error getting users:", error);
@@ -26,7 +35,7 @@ export const adminRouter = router({
         });
       }
 
-      return (users || []).map((user) => ({
+      return profileRows.map((user) => ({
         id: user.id,
         name: user.nombre,
         email: user.email ?? user.id,
@@ -75,13 +84,10 @@ export const adminRouter = router({
           });
         }
 
-        const { error } = await supabase
-          .from("profiles")
-          .update({
-            rol: input.role,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", input.userId);
+        const { error } = await ctx.supabase.rpc("admin_set_profile_role", {
+          p_user_id: input.userId,
+          p_role: input.role,
+        });
 
         if (error) {
           console.error("Error updating user role:", error);
@@ -119,18 +125,15 @@ export const adminRouter = router({
     .input(
       z.object({
         userId: z.string().uuid(),
-        status: z.enum(["active", "pending", "blocked"]),
+        status: z.enum(["active", "blocked"]),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       try {
-        const { error } = await supabase
-          .from("profiles")
-          .update({
-            status: input.status,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", input.userId);
+        const { error } = await ctx.supabase.rpc("admin_set_profile_status", {
+          p_user_id: input.userId,
+          p_status: input.status,
+        });
 
         if (error) {
           console.error("Error updating user status:", error);
@@ -164,11 +167,10 @@ export const adminRouter = router({
    *
    * Solo disponible para administradores.
    */
-  getStatistics: adminProcedure.query(async () => {
+  getStatistics: adminProcedure.query(async ({ ctx }) => {
     try {
-      const { data: users, error } = await supabase
-        .from("profiles")
-        .select("status, rol");
+      const { data: users, error } = await ctx.supabase.rpc("admin_list_profiles");
+      const profileRows = (users ?? []) as AdminProfileRow[];
 
       if (error) {
         console.error("Error getting statistics:", error);
@@ -179,16 +181,10 @@ export const adminRouter = router({
         });
       }
 
-      const totalUsers = users?.length ?? 0;
-
-      const activeUsers =
-        users?.filter((user) => user.status === "active").length ?? 0;
-
-      const blockedUsers =
-        users?.filter((user) => user.status === "blocked").length ?? 0;
-
-      const adminUsers =
-        users?.filter((user) => user.rol === "admin").length ?? 0;
+      const totalUsers = profileRows.length;
+      const activeUsers = profileRows.filter((user) => user.status === "active").length;
+      const blockedUsers = profileRows.filter((user) => user.status === "blocked").length;
+      const adminUsers = profileRows.filter((user) => user.rol === "admin").length;
 
       return {
         totalUsers,

@@ -1,28 +1,31 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { Profile } from "../../shared/types";
-import { verifySupabaseToken, supabase } from "../lib/supabase";
+import { verifySupabaseToken, supabase, createSupabaseUserClient } from "../lib/supabase";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
   user: Profile | null;
+  supabase: ReturnType<typeof createSupabaseUserClient>;
 };
 
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
   let profile: Profile | null = null;
+  let requestSupabase = supabase;
 
   // Extract token from Authorization header
   const authHeader = opts.req.headers.authorization;
 
   if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.substring(7);
+    const token = authHeader.substring(7).trim();
+    requestSupabase = createSupabaseUserClient(token);
     const user = await verifySupabaseToken(token);
 
     if (user) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await requestSupabase
           .from("profiles")
           .select("*")
           .eq("id", user.id)
@@ -53,5 +56,6 @@ export async function createContext(
     req: opts.req,
     res: opts.res,
     user: profile,
+    supabase: requestSupabase,
   };
 }

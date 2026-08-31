@@ -274,9 +274,7 @@ export async function createUserProfile(
   userId: string,
   profileData: {
     nombre: string;
-    company_id?: string | null;
     telefono?: string | null;
-    rol?: string;
   }
 ) {
   const { data, error } =
@@ -286,11 +284,7 @@ export async function createUserProfile(
         {
           id: userId,
           nombre: profileData.nombre,
-          company_id: profileData.company_id ?? null,
           telefono: profileData.telefono ?? null,
-          rol: profileData.rol ?? "user",
-          fecha_registro: new Date().toISOString(),
-          fecha_ultimo_login: new Date().toISOString(),
         },
       ])
       .select()
@@ -318,23 +312,25 @@ export async function createUserProfile(
 /**
  * Update user profile
  *
- * company_id is the UUID of the company.
- *
- * Passing null removes the company association.
+ * Solo permite actualizar datos de contacto no privilegiados.
+ * La empresa, el rol, el estado y la identidad pertenecen al backend.
  */
 export async function updateUserProfile(
   userId: string,
   profileData: Partial<{
     nombre: string;
-    company_id: string | null;
     telefono: string | null;
-    rol: string;
   }>
 ) {
+  const safeProfileData = {
+    ...(profileData.nombre !== undefined ? { nombre: profileData.nombre } : {}),
+    ...(profileData.telefono !== undefined ? { telefono: profileData.telefono } : {}),
+  };
+
   const { data, error } =
     await supabase
       .from("profiles")
-      .update(profileData)
+      .update(safeProfileData)
       .eq("id", userId)
       .select()
       .single();

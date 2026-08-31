@@ -22,6 +22,18 @@ type AdminProfile = {
   rol: string | null;
 };
 
+type AdminUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  company: string | null;
+  companyId: string | null;
+  role: string | null;
+  status: string;
+  createdAt: string;
+  lastSignedIn: string | null;
+};
+
 export default function AdminPanel() {
   const { user, signOut, loading } = useAuth();
   const [, setLocation] = useLocation();
@@ -35,7 +47,7 @@ export default function AdminPanel() {
   >("all");
 
   const [filterStatus, setFilterStatus] = useState<
-    "all" | "active" | "pending" | "blocked"
+    "all" | "active" | "blocked"
   >("all");
 
   /**
@@ -135,6 +147,8 @@ export default function AdminPanel() {
   const statsQuery = trpc.admin.getStatistics.useQuery(undefined, {
     enabled: !!user && isAdmin,
   });
+
+  const adminUsers = (usersQuery.data ?? []) as AdminUser[];
 
   /**
    * ============================================================
@@ -260,10 +274,7 @@ export default function AdminPanel() {
 
   const handleStatusChange = async (
     userId: string,
-    newStatus:
-      | "active"
-      | "pending"
-      | "blocked"
+    newStatus: "active" | "blocked"
   ) => {
     try {
       await updateStatusMutation.mutateAsync({
@@ -289,8 +300,6 @@ export default function AdminPanel() {
       case "active":
         return "bg-green-100 text-green-700";
 
-      case "pending":
-        return "bg-yellow-100 text-yellow-700";
 
       case "blocked":
         return "bg-red-100 text-red-700";
@@ -311,8 +320,6 @@ export default function AdminPanel() {
       case "active":
         return "Activo";
 
-      case "pending":
-        return "Pendiente";
 
       case "blocked":
         return "Bloqueado";
@@ -504,7 +511,6 @@ export default function AdminPanel() {
                           e.target.value as
                             | "all"
                             | "active"
-                            | "pending"
                             | "blocked"
                         )
                       }
@@ -518,9 +524,6 @@ export default function AdminPanel() {
                         Activo
                       </option>
 
-                      <option value="pending">
-                        Pendiente
-                      </option>
 
                       <option value="blocked">
                         Bloqueado
@@ -533,8 +536,8 @@ export default function AdminPanel() {
 
                 {/* LISTA */}
 
-                {usersQuery.data
-                  ?.filter((u) => {
+                {adminUsers
+                  .filter((u: AdminUser) => {
 
                     const matchesSearch =
                       u.name
@@ -562,7 +565,7 @@ export default function AdminPanel() {
                       matchesStatus
                     );
                   })
-                  .map((u) => (
+                  .map((u: AdminUser) => (
 
                     <Card
                       key={u.id}
@@ -748,31 +751,6 @@ export default function AdminPanel() {
                                 Activo
                               </Button>
 
-                              <Button
-                                onClick={() =>
-                                  handleStatusChange(
-                                    u.id,
-                                    "pending"
-                                  )
-                                }
-                                variant={
-                                  u.status ===
-                                  "pending"
-                                    ? "default"
-                                    : "outline"
-                                }
-                                className={
-                                  u.status ===
-                                  "pending"
-                                    ? "bg-yellow-600"
-                                    : ""
-                                }
-                                disabled={
-                                  updateStatusMutation.isPending
-                                }
-                              >
-                                Pendiente
-                              </Button>
 
                               <Button
                                 onClick={() =>

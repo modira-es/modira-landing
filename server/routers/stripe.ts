@@ -8,6 +8,31 @@ const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
 
+const configuredAppOrigin = (() => {
+  try {
+    return new URL(process.env.APP_URL || "https://modira.es").origin;
+  } catch {
+    return "https://modira.es";
+  }
+})();
+
+const allowedRedirectOrigins = new Set([
+  configuredAppOrigin,
+  "https://modira.es",
+  "https://www.modira.es",
+  "http://localhost:5173",
+]);
+
+function isAllowedRedirectUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && allowedRedirectOrigins.has(url.origin)
+      || url.protocol === "http:" && url.hostname === "localhost" && allowedRedirectOrigins.has(url.origin);
+  } catch {
+    return false;
+  }
+}
+
 export const stripeRouter = router({
   // Get all active products and prices
   getProducts: publicProcedure.query(async () => {
@@ -42,15 +67,18 @@ export const stripeRouter = router({
     .input(
       z.object({
         priceId: z.string(),
-        successUrl: z.string(),
-        cancelUrl: z.string(),
+        successUrl: z.string().url(),
+        cancelUrl: z.string().url(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      if (!isAllowedRedirectUrl(input.successUrl) || !isAllowedRedirectUrl(input.cancelUrl)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "URL de redirección no permitida" });
+      }
 
       // Get price details
-      const { data: priceDetails, error: priceError } = await supabase
+      const { data: priceDetails, error: priceError } = await ctx.supabase
         .from("stripe_prices")
         .select("*")
         .eq("stripe_price_id", input.priceId)
@@ -93,16 +121,19 @@ export const stripeRouter = router({
     .input(
       z.object({
         quotationId: z.string(),
-        successUrl: z.string(),
-        cancelUrl: z.string(),
+        successUrl: z.string().url(),
+        cancelUrl: z.string().url(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+      if (!isAllowedRedirectUrl(input.successUrl) || !isAllowedRedirectUrl(input.cancelUrl)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "URL de redirección no permitida" });
+      }
       
       try {
         // Fetch quotation from new unified schema
-        let query = supabase
+        let query = ctx.supabase
           .from("quotations")
           .select("*")
           .eq("id", input.quotationId);
@@ -145,7 +176,7 @@ export const stripeRouter = router({
         });
 
         // Update quotation with session ID
-        await supabase
+        await ctx.supabase
           .from("quotations")
           .update({ stripe_session_id: session.id, updated_at: new Date().toISOString() })
           .eq("id", quotation.id);
@@ -160,7 +191,7 @@ export const stripeRouter = router({
 
   // Get user subscriptions
   getUserSubscriptions: protectedProcedure.query(async ({ ctx }) => {
-    const { data: subs, error: subsError } = await supabase
+    const { data: subs, error: subsError } = await ctx.supabase
       .from("user_subscriptions")
       .select("*")
       .eq("user_id", ctx.user.id);
@@ -201,7 +232,7 @@ export const stripeRouter = router({
 
   // Get user payments/invoices
   getUserPayments: protectedProcedure.query(async ({ ctx }) => {
-    let query = supabase
+    let query = ctx.supabase
       .from("payments")
       .select("*");
     
@@ -228,7 +259,7 @@ export const stripeRouter = router({
   }),
 
   getUserInvoices: protectedProcedure.query(async ({ ctx }) => {
-    let query = supabase
+    let query = ctx.supabase
       .from("payments")
       .select("*")
       .order("created_at", { ascending: false });
@@ -273,7 +304,7 @@ export const stripeRouter = router({
       if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
 
       // Verify subscription belongs to user
-      const { data: sub, error: subError } = await supabase
+      const { data: sub, error: subError } = await ctx.supabase
         .from("user_subscriptions")
         .select("*")
         .eq("stripe_subscription_id", input.subscriptionId)
@@ -289,7 +320,7 @@ export const stripeRouter = router({
         });
 
         // Update database
-        await supabase
+        await ctx.supabase
           .from("user_subscriptions")
           .update({ 
             status: canceled.status, 
@@ -309,7 +340,7 @@ export const stripeRouter = router({
   getPaymentDetails: protectedProcedure
     .input(z.object({ paymentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { data: payment, error } = await supabase
+      const { data: payment, error } = await ctx.supabase
         .from("payments")
         .select("*")
         .eq("stripe_invoice_id", input.paymentId)
