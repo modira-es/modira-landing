@@ -14,12 +14,16 @@
 // - Rate limiting persistente mediante RPC de Supabase
 // - Rate limiting atómico por sesión e IP
 // - Rate limiting global de la IA
+// - Rate limiting por usuario autenticado
 // - Límite de concurrencia por sesión
 // - Timeout de OpenAI
 // - Logs sin contenido de conversaciones
 // - Kill switch mediante AI_ENABLED
 // - Persistencia mediante Supabase REST API
 // - Extracción opcional de empresa/sector
+// - Cuota económica/tokens mediante reserva atómica
+// - Usuarios autenticados vinculados a su propia cuenta
+// - Usuarios anónimos vinculados a identidad anónima + sesión
 //
 // ============================================================
 
@@ -53,14 +57,11 @@ const IP_RATE_LIMIT = 20;
 
 const IP_RATE_WINDOW_SECONDS = 24 * 60 * 60;
 
-// Límite global de todas las solicitudes válidas de Modira AI.
 const GLOBAL_AI_RATE_LIMIT = 100;
 
 const GLOBAL_AI_RATE_WINDOW_SECONDS = 60 * 60;
 
-const USER_RATE_LIMIT = 20;
 
-const USER_RATE_WINDOW_SECONDS = 60 * 60;
 
 
 // ============================================================
@@ -201,19 +202,52 @@ function isValidUuid(
 
 
 // ============================================================
-// IP DEL CLIENTE
+// IP / IDENTIDAD ANÓNIMA
+// ============================================================
+//
+// Solo se acepta cf-connecting-ip como IP observada por
+// el proxy de confianza.
+//
+// No se utilizan x-forwarded-for ni x-real-ip porque pueden
+// ser controladas por un cliente directo.
+//
+// La IP nunca se almacena en claro: se genera un identificador
+// SHA-256 con salt.
+//
 // ============================================================
 
-async function getAnonymousIdentity(req: Request): Promise<string> {
-  // Solo se acepta la IP escrita por el proxy de confianza. Las cabeceras
-  // x-forwarded-for/x-real-ip pueden ser controladas por un cliente directo.
-  const observed = req.headers.get("cf-connecting-ip")?.trim() || "unknown";
-  const salt = Deno.env.get("ANON_IDENTITY_SALT") ?? "modira-anonymous-identity";
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(`${salt}:${observed}`),
-  );
-  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+async function getAnonymousIdentity(
+  req: Request
+): Promise<string> {
+  const observed =
+    req.headers
+      .get("cf-connecting-ip")
+      ?.trim() ||
+    "unknown";
+
+  const salt =
+    Deno.env.get(
+      "ANON_IDENTITY_SALT"
+    ) ??
+    "modira-anonymous-identity";
+
+  const digest =
+    await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(
+        `${salt}:${observed}`
+      )
+    );
+
+  const hex =
+    Array.from(
+      new Uint8Array(digest),
+      (byte) =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
+    ).join("");
+
   return `anon-ip:${hex}`;
 }
 
@@ -224,7 +258,6 @@ async function getAnonymousIdentity(req: Request): Promise<string> {
 
 type ClientMessage = {
   role:
-    | "system"
     | "user"
     | "assistant";
 
@@ -273,19 +306,27 @@ type Conversation = {
 
 type RateLimitResult = {
   allowed: boolean;
+
   remaining: number;
+
   retry_after_seconds: number;
 };
+
 
 type OpenAIUsage = {
   inputTokens: number;
+
   outputTokens: number;
 };
 
+
 type QuotaResult = {
   allowed: boolean;
+
   reservation_id: string | null;
+
   retry_after_seconds: number;
+
   reason: string;
 };
 
@@ -360,7 +401,6 @@ function validateClientMessages(
       candidate.content;
 
     if (
-      role !== "system" &&
       role !== "user" &&
       role !== "assistant"
     ) {
@@ -407,7 +447,8 @@ function validateClientMessages(
       };
     }
 
-    totalChars += trimmed.length;
+    totalChars +=
+      trimmed.length;
 
     if (
       totalChars >
@@ -609,6 +650,137 @@ async function supabaseRequest<T>(
 // ============================================================
 // RATE LIMIT — RPC PERSISTENTE
 // ============================================================
+async function getAiQuotaConfig(
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<{
+  enabled: boolean;
+  user_request_limit: number;
+  period_seconds: number;
+  budget_cents: number | null;
+  max_input_tokens: number;
+  max_output_tokens: number;
+}> {
+  const query =
+  "config_key=eq.modira-ai&select=enabled,user_request_limit,period_seconds,budget_cents,max_input_tokens,max_output_tokens&limit=1";
+
+  const config =
+    await supabaseRequest<
+      Array<{
+        enabled: boolean;
+        user_request_limit: number;
+        period_seconds: number;
+        budget_cents: number | null;
+        max_input_tokens: number;
+        max_output_tokens: number;
+      }>
+    >(
+      supabaseUrl,
+      serviceRoleKey,
+      `ai_quota_config?${query}`
+    );
+
+  if (
+    !Array.isArray(config) ||
+    !config[0]
+  ) {
+    throw new Error(
+      "No se encontró la configuración de Modira AI."
+    );
+  }
+
+  const row = config[0];
+
+  const userLimit =
+    Number(row.user_request_limit);
+
+  const periodSeconds =
+    Number(row.period_seconds);
+
+  const budgetCents =
+  row.budget_cents === null
+    ? null
+    : Number(row.budget_cents);
+    
+    if (
+  budgetCents !== null &&
+  (
+    !Number.isFinite(budgetCents) ||
+    budgetCents < 0
+  )
+) {
+  throw new Error(
+    "budget_cents inválido en ai_quota_config."
+  );
+}
+
+  const maxInputTokens =
+    Number(row.max_input_tokens);
+
+  const maxOutputTokens =
+    Number(row.max_output_tokens);
+
+  if (
+    !Number.isInteger(userLimit) ||
+    userLimit < 1 ||
+    userLimit > 1000
+  ) {
+    throw new Error(
+      "user_request_limit inválido en ai_quota_config."
+    );
+  }
+
+  if (
+    !Number.isInteger(periodSeconds) ||
+    periodSeconds < 1 ||
+    periodSeconds > 86400
+  ) {
+    throw new Error(
+      "period_seconds inválido en ai_quota_config."
+    );
+  }
+
+  if (
+    !Number.isInteger(maxInputTokens) ||
+    maxInputTokens < 1 ||
+    maxInputTokens > 100000
+  ) {
+    throw new Error(
+      "max_input_tokens inválido en ai_quota_config."
+    );
+  }
+
+  if (
+    !Number.isInteger(maxOutputTokens) ||
+    maxOutputTokens < 1 ||
+    maxOutputTokens > 10000
+  ) {
+    throw new Error(
+      "max_output_tokens inválido en ai_quota_config."
+    );
+  }
+
+  return {
+    enabled:
+      row.enabled === true,
+
+    user_request_limit:
+      userLimit,
+
+    period_seconds:
+      periodSeconds,
+
+    max_input_tokens:
+      maxInputTokens,
+
+    max_output_tokens:
+      maxOutputTokens,
+
+    budget_cents:
+  budgetCents,
+  };
+}
+
 
 async function consumeAiRateLimit(
   supabaseUrl: string,
@@ -699,39 +871,88 @@ async function consumeAiRateLimit(
 }
 
 
+// ============================================================
+// CUOTA — USUARIO AUTENTICADO
+// ============================================================
+
 async function reserveAiQuota(
   supabaseUrl: string,
   serviceRoleKey: string,
-  userId: string | null,
+  userId: string,
   companyId: string | null,
   estimatedInputTokens: number,
   estimatedOutputTokens: number,
   estimatedCostCents: number
 ): Promise<QuotaResult> {
-  const result = await supabaseRequest<QuotaResult[]>(
-    supabaseUrl,
-    serviceRoleKey,
-    "rpc/reserve_ai_quota_for_user",
-    {
-      method: "POST",
-      body: {
-        p_user_id: userId,
-        p_company_id: companyId,
-        p_estimated_input_tokens: estimatedInputTokens,
-        p_estimated_output_tokens: estimatedOutputTokens,
-        p_estimated_cost_cents: estimatedCostCents,
-      },
-    }
-  );
-  if (!Array.isArray(result) || !result[0]) throw new Error("Quota RPC inválida.");
-  const row = result[0];
+  const result =
+    await supabaseRequest<
+      QuotaResult[]
+    >(
+      supabaseUrl,
+      serviceRoleKey,
+      "rpc/reserve_ai_quota_for_user",
+      {
+        method:
+          "POST",
+
+        body: {
+          p_user_id:
+            userId,
+
+          p_company_id:
+            companyId,
+
+          p_estimated_input_tokens:
+            estimatedInputTokens,
+
+          p_estimated_output_tokens:
+            estimatedOutputTokens,
+
+          p_estimated_cost_cents:
+            estimatedCostCents,
+        },
+      }
+    );
+
+  if (
+    !Array.isArray(result) ||
+    !result[0]
+  ) {
+    throw new Error(
+      "Quota RPC inválida."
+    );
+  }
+
+  const row =
+    result[0];
+
   return {
-    allowed: row.allowed === true,
-    reservation_id: typeof row.reservation_id === "string" ? row.reservation_id : null,
-    retry_after_seconds: Number(row.retry_after_seconds) || 0,
-    reason: typeof row.reason === "string" ? row.reason : "quota",
+    allowed:
+      row.allowed === true,
+
+    reservation_id:
+      typeof row.reservation_id ===
+      "string"
+        ? row.reservation_id
+        : null,
+
+    retry_after_seconds:
+      Number(
+        row.retry_after_seconds
+      ) || 0,
+
+    reason:
+      typeof row.reason ===
+      "string"
+        ? row.reason
+        : "quota",
   };
 }
+
+
+// ============================================================
+// FINALIZAR CUOTA
+// ============================================================
 
 async function finalizeAiQuota(
   supabaseUrl: string,
@@ -747,17 +968,46 @@ async function finalizeAiQuota(
     serviceRoleKey,
     "rpc/finalize_ai_quota",
     {
-      method: "POST",
+      method:
+        "POST",
+
       body: {
-        p_reservation_id: reservationId,
-        p_actual_input_tokens: Math.max(0, Math.floor(inputTokens)),
-        p_actual_output_tokens: Math.max(0, Math.floor(outputTokens)),
-        p_actual_cost_cents: Math.max(0, costCents),
-        p_success: success,
+        p_reservation_id:
+          reservationId,
+
+        p_actual_input_tokens:
+          Math.max(
+            0,
+            Math.floor(
+              inputTokens
+            )
+          ),
+
+        p_actual_output_tokens:
+          Math.max(
+            0,
+            Math.floor(
+              outputTokens
+            )
+          ),
+
+        p_actual_cost_cents:
+          Math.max(
+            0,
+            costCents
+          ),
+
+        p_success:
+          success,
       },
     }
   );
 }
+
+
+// ============================================================
+// CUOTA — USUARIO ANÓNIMO
+// ============================================================
 
 async function reserveAnonymousAiQuota(
   supabaseUrl: string,
@@ -767,19 +1017,68 @@ async function reserveAnonymousAiQuota(
   estimatedOutputTokens: number,
   estimatedCostCents: number
 ): Promise<QuotaResult> {
-  const result = await supabaseRequest<QuotaResult[]>(supabaseUrl, serviceRoleKey, "rpc/reserve_ai_anonymous_quota", {
-    method: "POST",
-    body: {
-      p_identity_key: identityKey,
-      p_estimated_input_tokens: estimatedInputTokens,
-      p_estimated_output_tokens: estimatedOutputTokens,
-      p_estimated_cost_cents: estimatedCostCents,
-    },
-  });
-  if (!Array.isArray(result) || !result[0]) throw new Error("Quota anónima RPC inválida.");
-  const row = result[0];
-  return { allowed: row.allowed === true, reservation_id: typeof row.reservation_id === "string" ? row.reservation_id : null, retry_after_seconds: Number(row.retry_after_seconds) || 0, reason: typeof row.reason === "string" ? row.reason : "quota" };
+  const result =
+    await supabaseRequest<
+      QuotaResult[]
+    >(
+      supabaseUrl,
+      serviceRoleKey,
+      "rpc/reserve_ai_anonymous_quota",
+      {
+        method:
+          "POST",
+
+        body: {
+          p_identity_key:
+            identityKey,
+
+          p_estimated_input_tokens:
+            estimatedInputTokens,
+
+          p_estimated_output_tokens:
+            estimatedOutputTokens,
+
+          p_estimated_cost_cents:
+            estimatedCostCents,
+        },
+      }
+    );
+
+  if (
+    !Array.isArray(result) ||
+    !result[0]
+  ) {
+    throw new Error(
+      "Quota anónima RPC inválida."
+    );
+  }
+
+  const row =
+    result[0];
+
+  return {
+    allowed:
+      row.allowed === true,
+
+    reservation_id:
+      typeof row.reservation_id ===
+      "string"
+        ? row.reservation_id
+        : null,
+
+    retry_after_seconds:
+      Number(
+        row.retry_after_seconds
+      ) || 0,
+
+    reason:
+      typeof row.reason ===
+      "string"
+        ? row.reason
+        : "quota",
+  };
 }
+
 
 // ============================================================
 // BUSCAR CONVERSACIÓN
@@ -850,9 +1149,14 @@ async function createConversation(
           "return=representation",
 
         body: {
-          session_id: sessionId,
-          user_id: userId,
-          company_id: companyId,
+          session_id:
+            sessionId,
+
+          user_id:
+            userId,
+
+          company_id:
+            companyId,
         },
       }
     );
@@ -903,10 +1207,6 @@ async function getOrCreateConversation(
       companyId
     );
   } catch {
-    // Posible carrera entre instancias.
-    //
-    // ai_conversations debe tener session_id único.
-
     const recovered =
       await findConversation(
         supabaseUrl,
@@ -1153,28 +1453,84 @@ function extractOpenAIText(
 
 
 // ============================================================
-// LLAMADA A OPENAI
+// EXTRAER USO DE OPENAI
 // ============================================================
 
-function extractOpenAIUsage(data: unknown): OpenAIUsage {
-  if (typeof data !== "object" || data === null || !("usage" in data)) {
-    return { inputTokens: 0, outputTokens: 0 };
+function extractOpenAIUsage(
+  data: unknown
+): OpenAIUsage {
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("usage" in data)
+  ) {
+    return {
+      inputTokens: 0,
+      outputTokens: 0,
+    };
   }
-  const usage = (data as { usage?: Record<string, unknown> }).usage;
-  const inputTokens = Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0);
-  const outputTokens = Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0);
+
+  const usage =
+    (
+      data as {
+        usage?: Record<
+          string,
+          unknown
+        >;
+      }
+    ).usage;
+
+  const inputTokens =
+    Number(
+      usage?.input_tokens ??
+      usage?.prompt_tokens ??
+      0
+    );
+
+  const outputTokens =
+    Number(
+      usage?.output_tokens ??
+      usage?.completion_tokens ??
+      0
+    );
+
   return {
-    inputTokens: Number.isFinite(inputTokens) && inputTokens >= 0 ? Math.floor(inputTokens) : 0,
-    outputTokens: Number.isFinite(outputTokens) && outputTokens >= 0 ? Math.floor(outputTokens) : 0,
+    inputTokens:
+      Number.isFinite(
+        inputTokens
+      ) &&
+      inputTokens >= 0
+        ? Math.floor(
+            inputTokens
+          )
+        : 0,
+
+    outputTokens:
+      Number.isFinite(
+        outputTokens
+      ) &&
+      outputTokens >= 0
+        ? Math.floor(
+            outputTokens
+          )
+        : 0,
   };
 }
+
+
+// ============================================================
+// LLAMADA A OPENAI
+// ============================================================
 
 async function callOpenAI(
   apiKey: string,
   instructions: string,
   input: OpenAIMessage[],
   maxOutputTokens: number
-): Promise<{ text: string; usage: OpenAIUsage }> {
+): Promise<{
+  text: string;
+  usage: OpenAIUsage;
+}> {
   const controller =
     new AbortController();
 
@@ -1256,7 +1612,10 @@ async function callOpenAI(
         data
       ).trim();
 
-    const usage = extractOpenAIUsage(data);
+    const usage =
+      extractOpenAIUsage(
+        data
+      );
 
     if (!text) {
       throw new Error(
@@ -1264,12 +1623,16 @@ async function callOpenAI(
       );
     }
 
-    return { text, usage };
+    return {
+      text,
+      usage,
+    };
 
   } catch (error) {
     if (
       error instanceof DOMException &&
-      error.name === "AbortError"
+      error.name ===
+        "AbortError"
     ) {
       throw new Error(
         "La solicitud a OpenAI agotó el tiempo de espera."
@@ -1279,7 +1642,9 @@ async function callOpenAI(
     throw error;
 
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(
+      timeout
+    );
   }
 }
 
@@ -1380,21 +1745,27 @@ function parseCompanyExtraction(
     text.trim();
 
   if (
-    cleaned.startsWith("```json")
+    cleaned.startsWith(
+      "```json"
+    )
   ) {
     cleaned =
       cleaned.slice(7);
   }
 
   if (
-    cleaned.startsWith("```")
+    cleaned.startsWith(
+      "```"
+    )
   ) {
     cleaned =
       cleaned.slice(3);
   }
 
   if (
-    cleaned.endsWith("```")
+    cleaned.endsWith(
+      "```"
+    )
   ) {
     cleaned =
       cleaned.slice(
@@ -1617,42 +1988,275 @@ Deno.serve(
 
 
     // ========================================================
+    // CONFIGURACIÓN DE CUOTAS DESDE SUPABASE
+    // ========================================================
+    //
+    // La configuración operativa de Modira AI se obtiene de
+    // public.ai_quota_config.
+    //
+    // Esto permite modificar posteriormente:
+    //
+    // - límite de solicitudes
+    // - duración de la ventana
+    // - máximo de tokens de entrada
+    // - máximo de tokens de salida
+    // - habilitación/deshabilitación de IA
+    //
+    // sin modificar el código de la Edge Function.
+    //
+    // ========================================================
+
+    let aiQuotaConfig;
+
+    try {
+      aiQuotaConfig =
+        await getAiQuotaConfig(
+          supabaseUrl,
+          supabaseServiceRoleKey
+        );
+
+    } catch (error) {
+      console.error(
+        "MODIRA AI: no se pudo cargar la configuración de cuotas.",
+
+        error instanceof Error
+          ? error.message
+          : "unknown error"
+      );
+
+      return jsonResponse(
+        {
+          error:
+            "Modira AI no está disponible temporalmente.",
+        },
+
+        503,
+
+        origin
+      );
+    }
+
+
+    if (
+      !aiQuotaConfig.enabled
+    ) {
+      return jsonResponse(
+        {
+          error:
+            "Modira AI no está disponible temporalmente.",
+        },
+
+        503,
+
+        origin
+      );
+    }
+
+    // ========================================================
+    // IDENTIDAD ANÓNIMA
+    // ========================================================
+    //
+    // Se calcula ANTES de cualquier rate limit porque se utiliza
+    // tanto para el límite de IP como para el límite de sesión
+    // de usuarios anónimos y para la cuota anónima.
+    //
+    // ========================================================
+
+    const anonymousIdentity =
+      await getAnonymousIdentity(
+        req
+      );
+
+
+    // ========================================================
     // AUTENTICACIÓN DEL USUARIO
     // ========================================================
 
-    const authHeader = req.headers.get("Authorization");
-    let userId: string | null = null;
-    let companyId: string | null = null;
+    const authHeader =
+      req.headers.get(
+        "Authorization"
+      );
 
-    if (authHeader && !/^Bearer\s+\S+$/i.test(authHeader)) {
-      return jsonResponse({ error: "Sesión no válida." }, 401, origin);
+    let userId:
+      | string
+      | null = null;
+
+    let companyId:
+      | string
+      | null = null;
+
+    if (
+      authHeader &&
+      !/^Bearer\s+\S+$/i.test(
+        authHeader
+      )
+    ) {
+      return jsonResponse(
+        {
+          error:
+            "Sesión no válida.",
+        },
+
+        401,
+
+        origin
+      );
     }
 
     if (authHeader) {
       try {
-        const userResponse = await fetch(
-          `${supabaseUrl}/auth/v1/user`,
-          { headers: { apikey: supabaseServiceRoleKey, Authorization: authHeader } }
-        );
-        if (!userResponse.ok) return jsonResponse({ error: "Sesión no válida." }, 401, origin);
-        const authUser = await parseJsonResponse<{ id?: unknown }>(userResponse);
-        if (!authUser || !isValidUuid(authUser.id)) return jsonResponse({ error: "Sesión no válida." }, 401, origin);
-        userId = authUser.id;
+        const userResponse =
+          await fetch(
+            `${supabaseUrl}/auth/v1/user`,
+            {
+              headers: {
+                apikey:
+                  supabaseServiceRoleKey,
+
+                Authorization:
+                  authHeader,
+              },
+            }
+          );
+
+        if (
+          !userResponse.ok
+        ) {
+          return jsonResponse(
+            {
+              error:
+                "Sesión no válida.",
+            },
+
+            401,
+
+            origin
+          );
+        }
+
+        const authUser =
+          await parseJsonResponse<{
+            id?: unknown;
+          }>(
+            userResponse
+          );
+
+        if (
+          !authUser ||
+          !isValidUuid(
+            authUser.id
+          )
+        ) {
+          return jsonResponse(
+            {
+              error:
+                "Sesión no válida.",
+            },
+
+            401,
+
+            origin
+          );
+        }
+
+        userId =
+          authUser.id;
+
       } catch (error) {
-        console.error("MODIRA AI: error verificando la sesión.", error instanceof Error ? error.message : "unknown error");
-        return jsonResponse({ error: "No se ha podido verificar la sesión." }, 503, origin);
+        console.error(
+          "MODIRA AI: error verificando la sesión.",
+
+          error instanceof Error
+            ? error.message
+            : "unknown error"
+        );
+
+        return jsonResponse(
+          {
+            error:
+              "No se ha podido verificar la sesión.",
+          },
+
+          503,
+
+          origin
+        );
       }
 
-      const profiles = await supabaseRequest<Array<{ id: string; status: string | null; company_id: string | null }>>(
-        supabaseUrl,
-        supabaseServiceRoleKey,
-        `profiles?id=eq.${encodeURIComponent(userId)}&select=id,status,company_id&limit=1`
-      );
-      const profile = Array.isArray(profiles) ? profiles[0] : null;
-      if (!profile) return jsonResponse({ error: "No se ha podido verificar la cuenta." }, 403, origin);
-      if (String(profile.status ?? "").trim().toLowerCase() !== "active") return jsonResponse({ error: "Tu cuenta no está activa." }, 403, origin);
-      companyId = isValidUuid(profile.company_id) ? profile.company_id : null;
+
+      // ======================================================
+      // PERFIL Y ESTADO DE CUENTA
+      // ======================================================
+
+      const profiles =
+        await supabaseRequest<
+          Array<{
+            id: string;
+
+            status:
+              | string
+              | null;
+
+            company_id:
+              | string
+              | null;
+          }>
+        >(
+          supabaseUrl,
+          supabaseServiceRoleKey,
+          `profiles?id=eq.${encodeURIComponent(
+            userId
+          )}&select=id,status,company_id&limit=1`
+        );
+
+      const profile =
+        Array.isArray(
+          profiles
+        )
+          ? profiles[0]
+          : null;
+
+      if (!profile) {
+        return jsonResponse(
+          {
+            error:
+              "No se ha podido verificar la cuenta.",
+          },
+
+          403,
+
+          origin
+        );
+      }
+
+      if (
+        String(
+          profile.status ?? ""
+        )
+          .trim()
+          .toLowerCase() !==
+        "active"
+      ) {
+        return jsonResponse(
+          {
+            error:
+              "Tu cuenta no está activa.",
+          },
+
+          403,
+
+          origin
+        );
+      }
+
+      companyId =
+        isValidUuid(
+          profile.company_id
+        )
+          ? profile.company_id
+          : null;
     }
+
 
     // ========================================================
     // LEER BODY COMO BYTES
@@ -1682,7 +2286,9 @@ Deno.serve(
 
       rawBody =
         new TextDecoder()
-          .decode(buffer);
+          .decode(
+            buffer
+          );
 
     } catch {
       return jsonResponse(
@@ -1889,11 +2495,22 @@ Deno.serve(
       sessionId
     );
 
-    let quotaReservationId: string | null = null;
-    let quotaFinalized = false;
-    let actualInputTokens = 0;
-    let actualOutputTokens = 0;
-    let actualCostCents = 0;
+    let quotaReservationId:
+      | string
+      | null = null;
+
+    let quotaFinalized =
+      false;
+
+    let actualInputTokens =
+      0;
+
+    let actualOutputTokens =
+      0;
+
+    let actualCostCents =
+      0;
+
 
     try {
 
@@ -1902,62 +2519,73 @@ Deno.serve(
       // ======================================================
 
       if (userId) {
-      try {
-        const userRate = await consumeAiRateLimit(
-          supabaseUrl,
-          supabaseServiceRoleKey,
-          `user:${userId}`,
-          USER_RATE_LIMIT,
-          USER_RATE_WINDOW_SECONDS
-        );
+        try {
+          const userRate =
+  await consumeAiRateLimit(
+    supabaseUrl,
+    supabaseServiceRoleKey,
 
-        if (!userRate.allowed) {
+    `user:${userId}`,
+
+    aiQuotaConfig.user_request_limit,
+    aiQuotaConfig.period_seconds
+  );
+
+          if (
+            !userRate.allowed
+          ) {
+            return jsonResponse(
+              {
+                error:
+                  "Has alcanzado temporalmente el límite de Modira AI.",
+
+                retryAfterSeconds:
+                  userRate.retry_after_seconds,
+
+                remaining:
+                  userRate.remaining,
+              },
+
+              429,
+
+              origin
+            );
+          }
+
+        } catch (error) {
+          console.error(
+            "MODIRA AI: error en rate limit de usuario.",
+
+            error instanceof Error
+              ? error.message
+              : "unknown error"
+          );
+
           return jsonResponse(
             {
-              error: "Has alcanzado temporalmente el límite de Modira AI.",
-              retryAfterSeconds: userRate.retry_after_seconds,
-              remaining: userRate.remaining,
+              error:
+                "Modira AI no está disponible temporalmente.",
             },
-            429,
+
+            503,
+
             origin
           );
         }
-      } catch (error) {
-        console.error(
-          "MODIRA AI: error en rate limit de usuario.",
-          error instanceof Error ? error.message : "unknown error"
-        );
+      }
 
-        return jsonResponse(
-          {
-            error: "Modira AI no está disponible temporalmente.",
-          },
-          503,
-          origin
-        );
-      }
-      }
 
       // ======================================================
       // RATE LIMIT — GLOBAL
-      // ======================================================
-      //
-      // Este límite protege el servicio completo.
-      //
-      // Es persistente y atómico porque utiliza la RPC
-      // de Supabase.
-      //
-      // Solo se consume después de validar completamente
-      // la petición, evitando que peticiones malformadas
-      // gasten el cupo global.
-      //
       // ======================================================
 
       try {
         const globalRate =
           await consumeAiRateLimit(
             supabaseUrl,
-            supabaseServiceRoleKey,
+            serviceRoleKeyOrThrow(
+              supabaseServiceRoleKey
+            ),
 
             "global:modira-ai",
 
@@ -2018,7 +2646,9 @@ Deno.serve(
             supabaseUrl,
             supabaseServiceRoleKey,
 
-            `session:${userId ?? anonymousIdentity}:${sessionId}`,
+            userId
+              ? `session:user:${userId}:${sessionId}`
+              : `session:anonymous:${anonymousIdentity}:${sessionId}`,
 
             SESSION_RATE_LIMIT,
             SESSION_RATE_WINDOW_SECONDS
@@ -2068,10 +2698,8 @@ Deno.serve(
 
 
       // ======================================================
-      // RATE LIMIT — IP
+      // RATE LIMIT — IP / IDENTIDAD ANÓNIMA
       // ======================================================
-
-      const anonymousIdentity = await getAnonymousIdentity(req);
 
       try {
         const ipRate =
@@ -2129,25 +2757,103 @@ Deno.serve(
 
 
       // ======================================================
-      // CUOTA GLOBAL — RESERVA ATÓMICA ANTES DE OPENAI
+      // CUOTA — RESERVA ATÓMICA ANTES DE OPENAI
       // ======================================================
-      const estimatedInputTokens = Math.ceil((MODIRA_INSTRUCTIONS.length + MAX_TOTAL_HISTORY_CHARS) / 4);
-      const estimatedOutputTokens = 600;
-      const inputCostCentsPer1K = Number(Deno.env.get("OPENAI_INPUT_COST_CENTS_PER_1K") ?? "0");
-      const outputCostCentsPer1K = Number(Deno.env.get("OPENAI_OUTPUT_COST_CENTS_PER_1K") ?? "0");
-      const estimatedCostCents = Math.max(0, (estimatedInputTokens / 1000) * inputCostCentsPer1K + (estimatedOutputTokens / 1000) * outputCostCentsPer1K);
-      const quota = userId
-        ? await reserveAiQuota(supabaseUrl, supabaseServiceRoleKey, userId, companyId, estimatedInputTokens, estimatedOutputTokens, estimatedCostCents)
-        : await reserveAnonymousAiQuota(supabaseUrl, supabaseServiceRoleKey, anonymousIdentity, estimatedInputTokens, estimatedOutputTokens, estimatedCostCents);
-      if (!quota.allowed) {
+
+      const estimatedInputTokens =
+        Math.ceil(
+          (
+            MODIRA_INSTRUCTIONS.length +
+            MAX_TOTAL_HISTORY_CHARS
+          ) / 4
+        );
+
+      const estimatedOutputTokens =
+  aiQuotaConfig.max_output_tokens;
+
+      const inputCostCentsPer1K =
+        Number(
+          Deno.env.get(
+            "OPENAI_INPUT_COST_CENTS_PER_1K"
+          ) ?? "0"
+        );
+
+      const outputCostCentsPer1K =
+        Number(
+          Deno.env.get(
+            "OPENAI_OUTPUT_COST_CENTS_PER_1K"
+          ) ?? "0"
+        );
+
+      const estimatedCostCents =
+        Math.max(
+          0,
+
+          (
+            estimatedInputTokens /
+            1000
+          ) *
+            inputCostCentsPer1K +
+
+          (
+            estimatedOutputTokens /
+            1000
+          ) *
+            outputCostCentsPer1K
+        );
+
+      const quota =
+        userId
+          ? await reserveAiQuota(
+              supabaseUrl,
+              supabaseServiceRoleKey,
+              userId,
+              companyId,
+              estimatedInputTokens,
+              estimatedOutputTokens,
+              estimatedCostCents
+            )
+          : await reserveAnonymousAiQuota(
+              supabaseUrl,
+              supabaseServiceRoleKey,
+              anonymousIdentity,
+              estimatedInputTokens,
+              estimatedOutputTokens,
+              estimatedCostCents
+            );
+
+      if (
+        !quota.allowed
+      ) {
         return jsonResponse(
-          { error: quota.reason === "budget_limit" ? "Se ha alcanzado la cuota económica de Modira AI." : "Has alcanzado la cuota de uso de Modira AI.", retryAfterSeconds: quota.retry_after_seconds },
+          {
+            error:
+              quota.reason ===
+              "budget_limit"
+                ? "Se ha alcanzado la cuota económica de Modira AI."
+                : "Has alcanzado la cuota de uso de Modira AI.",
+
+            retryAfterSeconds:
+              quota.retry_after_seconds,
+          },
+
           429,
+
           origin
         );
       }
-      quotaReservationId = quota.reservation_id;
-      if (!quotaReservationId) throw new Error("La reserva de cuota no devolvió identificador.");
+
+      quotaReservationId =
+        quota.reservation_id;
+
+      if (
+        !quotaReservationId
+      ) {
+        throw new Error(
+          "La reserva de cuota no devolvió identificador."
+        );
+      }
+
 
       // ======================================================
       // SOLICITUD VALIDADA
@@ -2166,8 +2872,13 @@ Deno.serve(
         await getOrCreateConversation(
           supabaseUrl,
           supabaseServiceRoleKey,
-          userId ? `${userId}:${sessionId}` : `${anonymousIdentity}:${sessionId}`,
+
+          userId
+            ? `${userId}:${sessionId}`
+            : `${anonymousIdentity}:${sessionId}`,
+
           userId,
+
           companyId
         );
 
@@ -2241,19 +2952,26 @@ Deno.serve(
 
 
       const assistantResult =
-        await callOpenAI(
-          openaiApiKey,
+      await callOpenAI(
+  openaiApiKey,
+  MODIRA_INSTRUCTIONS,
+  historyForOpenAI,
+  aiQuotaConfig.max_output_tokens
+);
 
-          MODIRA_INSTRUCTIONS,
+      actualInputTokens +=
+        assistantResult
+          .usage
+          .inputTokens;
 
-          historyForOpenAI,
+      actualOutputTokens +=
+        assistantResult
+          .usage
+          .outputTokens;
 
-          600
-        );
+      const assistantResponse =
+        assistantResult.text;
 
-      actualInputTokens += assistantResult.usage.inputTokens;
-      actualOutputTokens += assistantResult.usage.outputTokens;
-      const assistantResponse = assistantResult.text;
 
       const safeAssistantResponse =
         assistantResponse
@@ -2331,9 +3049,19 @@ Deno.serve(
               120
             );
 
-          actualInputTokens += extractionResult.usage.inputTokens;
-          actualOutputTokens += extractionResult.usage.outputTokens;
-          const extractionText = extractionResult.text;
+          actualInputTokens +=
+            extractionResult
+              .usage
+              .inputTokens;
+
+          actualOutputTokens +=
+            extractionResult
+              .usage
+              .outputTokens;
+
+          const extractionText =
+            extractionResult.text;
+
 
           if (
             extractionText &&
@@ -2437,13 +3165,45 @@ Deno.serve(
       // ======================================================
       // CONCILIAR CONSUMO REAL
       // ======================================================
-      if (quotaReservationId) {
-        const actualInputCost = (actualInputTokens / 1000) * inputCostCentsPer1K;
-        const actualOutputCost = (actualOutputTokens / 1000) * outputCostCentsPer1K;
-        actualCostCents = Math.max(0, actualInputCost + actualOutputCost);
-        await finalizeAiQuota(supabaseUrl, supabaseServiceRoleKey, quotaReservationId, actualInputTokens, actualOutputTokens, actualCostCents, true);
-        quotaFinalized = true;
+
+      if (
+        quotaReservationId
+      ) {
+        const actualInputCost =
+          (
+            actualInputTokens /
+            1000
+          ) *
+          inputCostCentsPer1K;
+
+        const actualOutputCost =
+          (
+            actualOutputTokens /
+            1000
+          ) *
+          outputCostCentsPer1K;
+
+        actualCostCents =
+          Math.max(
+            0,
+            actualInputCost +
+              actualOutputCost
+          );
+
+        await finalizeAiQuota(
+          supabaseUrl,
+          supabaseServiceRoleKey,
+          quotaReservationId,
+          actualInputTokens,
+          actualOutputTokens,
+          actualCostCents,
+          true
+        );
+
+        quotaFinalized =
+          true;
       }
+
 
       // ======================================================
       // RESPUESTA FINAL
@@ -2461,13 +3221,39 @@ Deno.serve(
       );
 
     } catch (error) {
-      if (quotaReservationId && !quotaFinalized) {
+
+      // ======================================================
+      // LIBERAR / FINALIZAR RESERVA DE CUOTA
+      // ======================================================
+
+      if (
+        quotaReservationId &&
+        !quotaFinalized
+      ) {
         try {
-          await finalizeAiQuota(supabaseUrl, supabaseServiceRoleKey, quotaReservationId, actualInputTokens, actualOutputTokens, actualCostCents, false);
-        } catch (finalizeError) {
-          console.error("MODIRA AI: no se pudo liberar la reserva.", finalizeError instanceof Error ? finalizeError.message : "unknown error");
+          await finalizeAiQuota(
+            supabaseUrl,
+            supabaseServiceRoleKey,
+            quotaReservationId,
+            actualInputTokens,
+            actualOutputTokens,
+            actualCostCents,
+            false
+          );
+
+        } catch (
+          finalizeError
+        ) {
+          console.error(
+            "MODIRA AI: no se pudo liberar la reserva.",
+
+            finalizeError instanceof Error
+              ? finalizeError.message
+              : "unknown error"
+          );
         }
       }
+
 
       // ======================================================
       // ERROR GENERAL
@@ -2505,3 +3291,28 @@ Deno.serve(
     }
   }
 );
+
+
+// ============================================================
+// VALIDACIÓN INTERNA DE SERVICE ROLE
+// ============================================================
+//
+// Helper para evitar pasar accidentalmente una clave vacía a
+// operaciones sensibles.
+//
+// ============================================================
+
+function serviceRoleKeyOrThrow(
+  value: string
+): string {
+  if (
+    !value ||
+    !value.trim()
+  ) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY no está disponible."
+    );
+  }
+
+  return value;
+}

@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS public.ai_quota_config (
 
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
 
-    user_request_limit INTEGER NOT NULL DEFAULT 20,
+    user_request_limit INTEGER NOT NULL DEFAULT 5,
 
     company_request_limit INTEGER,
 

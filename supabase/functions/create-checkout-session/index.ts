@@ -696,13 +696,31 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ========================================================
-    // 16. APP URL
-    // ========================================================
+   // ========================================================
+// 16. APP URL
+// ========================================================
 
-    const appUrl =
-      Deno.env.get("APP_URL") ||
-      "http://localhost:5173";
+const appUrl = Deno.env.get("APP_URL");
+
+if (!appUrl) {
+  console.error(
+    "APP_URL no está configurada."
+  );
+
+  return new Response(
+    JSON.stringify({
+      error:
+        "Configuración de checkout no disponible.",
+    }),
+    {
+      status: 503,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
 
     // ========================================================
     // 17. DESCRIPCIÓN PARA STRIPE
