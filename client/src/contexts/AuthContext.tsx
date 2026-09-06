@@ -55,10 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
   data: { subscription },
 } = supabase.auth.onAuthStateChange((event: any, session: any) => {
+  console.log("[Auth] Event:", event);
+  console.log("[Auth] Session:", session);
+
   setSession(session);
   setUser(session?.user ?? null);
 
   if (event === "PASSWORD_RECOVERY") {
+    console.log("[Auth] PASSWORD_RECOVERY detected");
     setIsRecoverySession(true);
   }
 });
