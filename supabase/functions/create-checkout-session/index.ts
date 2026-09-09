@@ -44,13 +44,62 @@ if (!supabaseServiceRoleKey) {
 // ============================================================
 // CORS
 // ============================================================
+//
+// AUDITORÍA V-08:
+//
+// Se sustituye "Access-Control-Allow-Origin: *" por una lista
+// explícita de orígenes configurada por entorno:
+//
+//   MODIRA_ALLOWED_ORIGINS="https://modira.es,https://www.modira.es"
+//
+// CORS no es un mecanismo de autenticación, pero reducir la
+// superficie de llamadas desde orígenes arbitrarios elimina
+// ruido y abuso simple de terceros.
+// ============================================================
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function getAllowedOrigins(): Set<string> {
+  const raw =
+    Deno.env.get("MODIRA_ALLOWED_ORIGINS") ?? "";
+
+  const origins = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  if (origins.length === 0) {
+    throw new Error(
+      "MODIRA_ALLOWED_ORIGINS no está configurada."
+    );
+  }
+
+  return new Set(origins);
+}
+
+const allowedOrigins =
+  getAllowedOrigins();
+
+function getCorsHeaders(origin: string | null) {
+  const allowed =
+    origin !== null &&
+    allowedOrigins.has(origin);
+
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+
+    "Access-Control-Allow-Methods":
+      "POST, OPTIONS",
+
+    "Vary":
+      "Origin",
+  };
+
+  if (allowed && origin) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+
+  return headers;
+}
 
 // ============================================================
 // PREPARAR DESCRIPCIÓN DE FACTURA PARA STRIPE
@@ -216,8 +265,13 @@ const getInvoiceDetail = (
 
 Deno.serve(async (req) => {
   // ==========================================================
-  // 1. CORS
+  // 1. CORS (por petición, reflejando solo orígenes permitidos)
   // ==========================================================
+
+  const corsHeaders =
+    getCorsHeaders(
+      req.headers.get("Origin")
+    );
 
   if (req.method === "OPTIONS") {
     return new Response("ok", {

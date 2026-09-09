@@ -90,13 +90,36 @@ const activeSessions = new Set<string>();
 // ============================================================
 // CORS
 // ============================================================
+//
+// Orígenes permitidos configurables por entorno (AUDITORÍA V-08):
+//
+//   MODIRA_ALLOWED_ORIGINS="https://modira.es,https://www.modira.es"
+//
+// Si la variable no está definida, la función falla de forma
+// explícita en el arranque en lugar de admitir orígenes por
+// defecto (incluido localhost) en producción.
+// ============================================================
 
-const allowedOrigins = new Set([
-  "https://modira.es",
-  "https://www.modira.es",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-]);
+function getAllowedOrigins(): Set<string> {
+  const raw =
+    Deno.env.get("MODIRA_ALLOWED_ORIGINS") ?? "";
+
+  const origins = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  if (origins.length === 0) {
+    throw new Error(
+      "MODIRA_ALLOWED_ORIGINS no está configurada."
+    );
+  }
+
+  return new Set(origins);
+}
+
+const allowedOrigins =
+  getAllowedOrigins();
 
 
 function getCorsHeaders(origin: string | null) {
@@ -225,11 +248,25 @@ async function getAnonymousIdentity(
       ?.trim() ||
     "unknown";
 
+  // AUDITORÍA V-02:
+  //
+  // El salt NUNCA puede ser el valor por defecto. Si
+  // ANON_IDENTITY_SALT no está configurada, la identidad anónima
+  // sería predecible y el límite por IP podría redistribuirse
+  // manipulando cabeceras. La función falla de forma explícita y
+  // el main devolverá 503 hasta que se configure el secreto.
+
   const salt =
-    Deno.env.get(
-      "ANON_IDENTITY_SALT"
-    ) ??
-    "modira-anonymous-identity";
+    Deno.env.get("ANON_IDENTITY_SALT");
+
+  if (
+    !salt ||
+    salt.trim().length < 16
+  ) {
+    throw new Error(
+      "ANON_IDENTITY_SALT no está configurada o es demasiado débil."
+    );
+  }
 
   const digest =
     await crypto.subtle.digest(
@@ -2060,12 +2097,40 @@ Deno.serve(
     // tanto para el límite de IP como para el límite de sesión
     // de usuarios anónimos y para la cuota anónima.
     //
+    // AUDITORÍA V-02: si ANON_IDENTITY_SALT no está configurada,
+    // getAnonymousIdentity lanza y el servicio queda deshabilitado
+    // (fail-closed) en lugar de operar con una identidad predecible.
+    //
     // ========================================================
 
-    const anonymousIdentity =
-      await getAnonymousIdentity(
-        req
+    let anonymousIdentity: string;
+
+    try {
+      anonymousIdentity =
+        await getAnonymousIdentity(
+          req
+        );
+
+    } catch (error) {
+      console.error(
+        "MODIRA AI: identidad anónima no disponible.",
+
+        error instanceof Error
+          ? error.message
+          : "unknown error"
       );
+
+      return jsonResponse(
+        {
+          error:
+            "Servicio temporalmente no disponible.",
+        },
+
+        503,
+
+        origin
+      );
+    }
 
 
     // ========================================================

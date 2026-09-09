@@ -1,0 +1,61 @@
+# ============================================================
+# MODIRA — Configuración de Supabase (auditoría preproducción)
+#
+# Este fichero materializa, en configuración de proyecto, los
+# controles que la auditoría no pudo verificar desde el código:
+#
+#   - verify_jwt: exige un JWT válido de Supabase en cada llamada
+#     a las Edge Functions (por defecto: true). modira-ai valida
+#     además el usuario y su estado de forma explícita.
+#
+#   - auth.captcha: activa la verificación server-side de Cloudflare
+#     Turnstile. El frontend ya envía captchaToken en
+#     signUp/signIn/resetPasswordForEmail; sin esta sección la
+#     verificación NO se aplica en el servidor (hallazgo V-05).
+#
+#   - auth.email: confirmación de correo obligatoria para reducir
+#     registros automatizados y abuso de correo (hallazgo V-05).
+#
+# Sustituye los valores de site_url, redirect_urls y la clave
+# pública de Turnstile por los del entorno real antes de desplegar.
+# ============================================================
+
+project_id = "modira"
+
+[functions.modira-ai]
+verify_jwt = true
+
+[functions.create-checkout-session]
+verify_jwt = true
+
+# El webhook de Stripe se autentica mediante firma HMAC; no lleva
+# JWT de usuario. Si tu plataforma lo requiere, configúralo como
+# secreto compartido en Stripe y mantén verify_jwt = false SOLO aquí.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[auth]
+site_url = "https://modira.es"
+additional_redirect_urls = [
+  "https://modira.es/auth/callback",
+  "https://modira.es/auth/reset-password",
+  "https://www.modira.es/auth/callback",
+  "https://www.modira.es/auth/reset-password"
+]
+# En desarrollo local añade: http://localhost:5173/auth/callback
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+maximum_available_auth_requests_per_minute = 100
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+secure_email_change_enabled = true
+max_frequency = "1m"
+
+[auth.captcha]
+enabled = true
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_TURNSTILE_SECRET)"

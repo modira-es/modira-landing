@@ -555,36 +555,33 @@ const handleFormSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
 
   try {
-    const { error } = await supabase
-      .from("audit_requests")
-      .insert([
-        {
-          nombre: formData.nombre,
-          email: formData.email,
-          empresa: formData.empresa,
-          empleados: formData.empleados,
-          proceso: formData.proceso,
-        },
-      ]);
+    // AUDITORÍA V-10:
+    //
+    // El INSERT directo anónimo en audit_requests se ha retirado
+    // (migración 028). La solicitud pasa por la RPC
+    // submit_audit_request, que valida los datos y aplica un límite
+    // de 3 solicitudes por identidad y hora en el backend.
+    const { error } = await supabase.rpc("submit_audit_request", {
+      p_nombre: formData.nombre,
+      p_email: formData.email,
+      p_empresa: formData.empresa,
+      p_empleados: formData.empleados,
+      p_proceso: formData.proceso,
+    });
 
     if (error) {
-      console.error("========== ERROR SUPABASE ==========");
-      console.error("Mensaje:", error.message);
-      console.error("Código:", error.code);
-      console.error("Detalles:", error.details);
-      console.error("Hint:", error.hint);
-      console.error("====================================");
+      // No se exponen detalles internos de la base de datos al
+      // usuario; el detalle técnico queda solo en consola.
+      console.error("Error enviando la solicitud:", error.message);
 
       alert(
-        `Error de Supabase:\n\n${error.message}\n\nCódigo: ${
-          error.code || "N/A"
-        }`
+        error.message.includes("Demasiadas solicitudes")
+          ? "Has enviado demasiadas solicitudes. Por favor, inténtalo de nuevo más tarde."
+          : "No se ha podido enviar la solicitud. Revisa los datos e inténtalo de nuevo."
       );
 
       return;
     }
-
-    console.log("Auditoría creada correctamente");
 
     alert("Gracias por tu solicitud. Te contactaremos pronto.");
 

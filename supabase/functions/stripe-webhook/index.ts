@@ -187,30 +187,25 @@ Deno.serve(async (request) => {
 
     let status: string;
 
-    switch (paymentIntent.status) {
-      case "succeeded":
-        status = "succeeded";
-        break;
 
-      case "canceled":
-        status = "canceled";
-        break;
+switch (paymentIntent.status) {
+  case "succeeded":
+    status = "succeeded";
+    break;
 
-      case "processing":
-        status = "processing";
-        break;
+  case "canceled":
+    status = "canceled";
+    break;
 
-      case "requires_action":
-        status = "requires_action";
-        break;
+  case "requires_payment_method":
+    status = "failed";
+    break;
 
-      case "requires_payment_method":
-        status = "requires_payment_method";
-        break;
-
-      default:
-        status = paymentIntent.status;
-    }
+  default:
+    throw new Error(
+      `PaymentIntent ${paymentIntent.id} tiene un estado no soportado: ${paymentIntent.status}`
+    );
+}
 
     const paidAt =
       paymentIntent.status === "succeeded"

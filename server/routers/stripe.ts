@@ -16,12 +16,25 @@ const configuredAppOrigin = (() => {
   }
 })();
 
-const allowedRedirectOrigins = new Set([
-  configuredAppOrigin,
-  "https://modira.es",
-  "https://www.modira.es",
-  "http://localhost:5173",
-]);
+// AUDITORÍA V-08:
+//
+// localhost solo se acepta como origen de redirección en desarrollo.
+// En producción el conjunto se limita al dominio real de la
+// aplicación, impidiendo redirects hacia entornos locales.
+const allowedRedirectOrigins = new Set(
+  process.env.NODE_ENV === "production"
+    ? [
+        configuredAppOrigin,
+        "https://modira.es",
+        "https://www.modira.es",
+      ]
+    : [
+        configuredAppOrigin,
+        "https://modira.es",
+        "https://www.modira.es",
+        "http://localhost:3000",
+      ]
+);
 
 function isAllowedRedirectUrl(value: string): boolean {
   try {
@@ -116,78 +129,19 @@ export const stripeRouter = router({
       }
     }),
 
-  // Create checkout session for a specific quotation
-  createQuotationCheckoutSession: protectedProcedure
-    .input(
-      z.object({
-        quotationId: z.string(),
-        successUrl: z.string().url(),
-        cancelUrl: z.string().url(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      if (!stripe) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
-      if (!isAllowedRedirectUrl(input.successUrl) || !isAllowedRedirectUrl(input.cancelUrl)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "URL de redirección no permitida" });
-      }
-      
-      try {
-        // Fetch quotation from new unified schema
-        let query = ctx.supabase
-          .from("quotations")
-          .select("*")
-          .eq("id", input.quotationId);
-        
-        if (ctx.user.companyId) {
-          query = query.eq("company_id", ctx.user.companyId);
-        } else {
-          query = query.eq("user_id", ctx.user.id);
-        }
-
-        const { data: quotation, error: quotationError } = await query.single();
-
-        if (quotationError || !quotation) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
-        }
-
-        // Create Stripe checkout session for the quotation
-        const session = await stripe!.checkout.sessions.create({
-          payment_method_types: ["card"],
-          line_items: [
-            {
-              price_data: {
-                currency: "eur",
-                product_data: {
-                  name: `Presupuesto: ${quotation.titulo}`,
-                  description: quotation.numero_presupuesto,
-                },
-                unit_amount: Math.round(Number(quotation.precio_total) * 100),
-              },
-              quantity: 1,
-            },
-          ],
-          mode: "payment",
-          success_url: input.successUrl,
-          cancel_url: input.cancelUrl,
-          metadata: {
-            userId: ctx.user.id,
-            quotationId: quotation.id,
-          },
-        });
-
-        // Update quotation with session ID
-        await ctx.supabase
-          .from("quotations")
-          .update({ stripe_session_id: session.id, updated_at: new Date().toISOString() })
-          .eq("id", quotation.id);
-
-        return { sessionId: session.id, url: session.url };
-      } catch (error) {
-        console.error("Stripe quotation checkout error:", error);
-        if (error instanceof TRPCError) throw error;
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create quotation checkout session" });
-      }
-    }),
+  // ============================================================
+  // AUDITORÍA V-06:
+  //
+  // createQuotationCheckoutSession se ha ELIMINADO.
+  //
+  // Era una segunda vía de cobro de presupuestos sin webhook de
+  // conciliación ni validación fiscal equivalente a la de facturas
+  // (importe_a_pagar + register_stripe_invoice_payment). Mantener
+  // dos caminos de pago divergentes introduce riesgo de pagos sin
+  // registrar. El cobro debe realizarse exclusivamente mediante
+  // facturas a través de la Edge Function create-checkout-session,
+  // cuya cadena de validación fue verificada en la auditoría.
+  // ============================================================
 
   // Get user subscriptions
   getUserSubscriptions: protectedProcedure.query(async ({ ctx }) => {

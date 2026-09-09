@@ -543,27 +543,6 @@ Output: { success: boolean; error?: string }
 
 ### Frontend (.env)
 
-```env
-# Supabase
-VITE_SUPABASE_URL=https://ddjlsuceyqhhfhuiexat.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_veYMkmpyUXD8cXctQZpXdA_lxR92N5S
-
-# Analytics (Manus)
-VITE_ANALYTICS_ENDPOINT=https://analytics.manus.im
-VITE_ANALYTICS_WEBSITE_ID=your-website-id
-
-# OAuth (Manus)
-VITE_OAUTH_PORTAL_URL=https://oauth.manus.im
-VITE_APP_ID=your-app-id
-
-# Forge API (Manus)
-VITE_FRONTEND_FORGE_API_URL=https://api.manus.im
-VITE_FRONTEND_FORGE_API_KEY=your-api-key
-
-# App Config
-VITE_APP_TITLE=Modira
-VITE_APP_LOGO=https://your-cdn.com/logo.png
-```
 
 ### Backend (.env)
 

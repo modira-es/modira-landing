@@ -699,24 +699,7 @@ export default function EmployeeProjects({
           project.id
         );
 
-        const isPdf =
-          file.type ===
-            "application/pdf" ||
-          file.name
-            .toLowerCase()
-            .endsWith(".pdf");
-
-        if (!isPdf) {
-          throw new Error(
-            "Solo se permiten archivos PDF."
-          );
-        }
-
-        if (file.size <= 0) {
-          throw new Error(
-            "El archivo PDF está vacío."
-          );
-        }
+        validateProjectDocumentFile(file);
 
         // ------------------------------------------------------
         // GENERAR ID DEL DOCUMENTO
@@ -843,24 +826,7 @@ export default function EmployeeProjects({
           project.id
         );
 
-        const isPdf =
-          file.type ===
-            "application/pdf" ||
-          file.name
-            .toLowerCase()
-            .endsWith(".pdf");
-
-        if (!isPdf) {
-          throw new Error(
-            "Solo se permiten archivos PDF."
-          );
-        }
-
-        if (file.size <= 0) {
-          throw new Error(
-            "El archivo PDF está vacío."
-          );
-        }
+        validateProjectDocumentFile(file);
 
         const storagePath =
           `${project.id}/${document.id}.pdf`;
@@ -960,31 +926,13 @@ export default function EmployeeProjects({
           document.id
         );
 
-        const {
-          data,
-          error: signedUrlError,
-        } =
-          await supabase.storage
-            .from(
-              "project-documents"
-            )
-            .createSignedUrl(
-              document.storage_path,
-              60 * 60
-            );
-
-        if (signedUrlError) {
-          throw signedUrlError;
-        }
-
-        if (!data?.signedUrl) {
-          throw new Error(
-            "No se pudo generar el enlace seguro del documento."
+        const signedUrl =
+          await createProjectDocumentSignedUrl(
+            document
           );
-        }
 
         window.open(
-          data.signedUrl,
+          signedUrl,
           "_blank",
           "noopener,noreferrer"
         );
@@ -1018,28 +966,10 @@ export default function EmployeeProjects({
           document.id
         );
 
-        const {
-          data,
-          error: signedUrlError,
-        } =
-          await supabase.storage
-            .from(
-              "project-documents"
-            )
-            .createSignedUrl(
-              document.storage_path,
-              60 * 60
-            );
-
-        if (signedUrlError) {
-          throw signedUrlError;
-        }
-
-        if (!data?.signedUrl) {
-          throw new Error(
-            "No se pudo generar el enlace seguro del documento."
+        const signedUrl =
+          await createProjectDocumentSignedUrl(
+            document
           );
-        }
 
         const link =
           window.document.createElement(
@@ -1047,7 +977,7 @@ export default function EmployeeProjects({
           );
 
         link.href =
-          data.signedUrl;
+          signedUrl;
 
         link.download =
           document.file_name;
@@ -3417,6 +3347,63 @@ export default function EmployeeProjects({
 // ============================================================
 // HELPERS
 // ============================================================
+
+/**
+ * Valida que un documento de proyecto sea un PDF no vacío.
+ * La validación del frontend es solo una primera barrera de UX;
+ * Storage/RPC/RLS siguen siendo la autoridad de seguridad.
+ */
+function validateProjectDocumentFile(
+  file: File
+): void {
+  const isPdf =
+    file.type === "application/pdf" ||
+    file.name
+      .toLowerCase()
+      .endsWith(".pdf");
+
+  if (!isPdf) {
+    throw new Error(
+      "Solo se permiten archivos PDF."
+    );
+  }
+
+  if (file.size <= 0) {
+    throw new Error(
+      "El archivo PDF está vacío."
+    );
+  }
+}
+
+/**
+ * Genera una URL firmada de corta duración para un documento
+ * privado del bucket project-documents.
+ */
+async function createProjectDocumentSignedUrl(
+  document: ProjectDocument
+): Promise<string> {
+  const {
+    data,
+    error,
+  } = await supabase.storage
+    .from("project-documents")
+    .createSignedUrl(
+      document.storage_path,
+      60 * 60
+    );
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.signedUrl) {
+    throw new Error(
+      "No se pudo generar el enlace seguro del documento."
+    );
+  }
+
+  return data.signedUrl;
+}
 
 function toDateTimeLocal(
   value: string
