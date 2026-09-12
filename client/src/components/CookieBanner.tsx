@@ -1,113 +1,457 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Cookie } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 type CookiePreferences = {
-  essential: boolean;
+  essential: true;
   analytics: boolean;
-  marketing: boolean;
+  policyVersion: string;
 };
+
+const COOKIE_PREFERENCES_KEY = "cookiePreferences";
+
+/*
+ * ============================================================
+ * MODIRA — VERSIÓN DE LA POLÍTICA DE COOKIES
+ * ============================================================
+ *
+ * Debe coincidir con la versión vigente utilizada por la RPC
+ * record_cookie_consent() en Supabase.
+ *
+ * Actualmente:
+ *
+ * 2026-09
+ *
+ * Si en el futuro se publica una nueva versión que requiera
+ * renovar el consentimiento, cambiar este valor.
+ */
+const COOKIE_POLICY_VERSION = "2026-09";
+
+const DEFAULT_PREFERENCES: CookiePreferences = {
+  essential: true,
+  analytics: false,
+  policyVersion: COOKIE_POLICY_VERSION,
+};
+
+declare global {
+  interface Window {
+    dataLayer: unknown[];
+    gtag: (...args: unknown[]) => void;
+    [key: `ga-disable-${string}`]: boolean | undefined;
+  }
+}
+
+/*
+ * ============================================================
+ * GOOGLE ANALYTICS
+ * ============================================================
+ */
+
+function getGoogleAnalyticsId(): string | null {
+  const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+
+  if (
+    !measurementId ||
+    typeof measurementId !== "string" ||
+    measurementId.startsWith("%")
+  ) {
+    return null;
+  }
+
+  return measurementId.trim() || null;
+}
+
+/*
+ * ============================================================
+ * GOOGLE TAG / DATA LAYER
+ * ============================================================
+ *
+ * Crea dataLayer + gtag sin cargar todavía Google Analytics.
+ *
+ * Esto permite establecer primero el estado de consentimiento.
+ */
+
+function initializeGoogleTag() {
+  window.dataLayer = window.dataLayer || [];
+
+  window.gtag =
+    window.gtag ||
+    function (...args: unknown[]) {
+      window.dataLayer.push(args);
+    };
+}
+
+/*
+ * ============================================================
+ * CONSENTIMIENTO POR DEFECTO
+ * ============================================================
+ *
+ * Todo lo opcional comienza denegado.
+ *
+ * No utilizamos Google Analytics ni almacenamiento analítico
+ * hasta que exista consentimiento.
+ */
+
+function setDefaultConsent() {
+  initializeGoogleTag();
+
+  window.gtag("consent", "default", {
+    analytics_storage: "denied",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
+}
+
+/*
+ * ============================================================
+ * ACTUALIZAR CONSENTIMIENTO DE GOOGLE
+ * ============================================================
+ */
+
+function updateGoogleConsent(analyticsGranted: boolean) {
+  initializeGoogleTag();
+
+  window.gtag("consent", "update", {
+    analytics_storage: analyticsGranted ? "granted" : "denied",
+
+    /*
+     * Modira no utiliza Google Ads ni herramientas de
+     * publicidad/remarketing en esta implementación.
+     */
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
+
+  const measurementId = getGoogleAnalyticsId();
+
+  if (!measurementId) {
+    return;
+  }
+
+  /*
+   * Protección adicional específica de Google Analytics.
+   */
+  window[`ga-disable-${measurementId}`] = !analyticsGranted;
+}
+
+/*
+ * ============================================================
+ * CARGAR GOOGLE ANALYTICS
+ * ============================================================
+ *
+ * Solo se ejecuta después de que exista consentimiento
+ * para analítica.
+ */
+
+function loadGoogleAnalytics() {
+  const measurementId = getGoogleAnalyticsId();
+
+  if (!measurementId) {
+    return;
+  }
+
+  /*
+   * Evitar cargar el script más de una vez.
+   */
+  if (document.getElementById("google-analytics-script")) {
+    return;
+  }
+
+  initializeGoogleTag();
+
+  /*
+   * Inicialización estándar de gtag.js.
+   */
+  window.gtag("js", new Date());
+
+  window.gtag("config", measurementId);
+
+  /*
+   * Cargar la etiqueta oficial de Google.
+   */
+  const script = document.createElement("script");
+
+  script.id = "google-analytics-script";
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
+    measurementId
+  )}`;
+
+  document.head.appendChild(script);
+}
+
+/*
+ * ============================================================
+ * REGISTRO DEL CONSENTIMIENTO
+ * ============================================================
+ *
+ * Registra la decisión en Supabase mediante la RPC pública:
+ *
+ * record_cookie_consent(boolean)
+ *
+ * La RPC determina en el servidor:
+ *
+ * - UUID del registro
+ * - fecha/hora
+ * - versión de la Política de Cookies
+ *
+ * El error NO bloquea el funcionamiento del banner.
+ *
+ * El consentimiento local continúa funcionando aunque
+ * temporalmente no pueda registrarse el evento en Supabase.
+ */
+
+async function recordCookieConsent(analytics: boolean) {
+  try {
+    const { error } = await supabase.rpc("record_cookie_consent", {
+      p_analytics: analytics,
+    });
+
+    if (error) {
+      console.error(
+        "No se pudo registrar el consentimiento de cookies.",
+        error
+      );
+    }
+  } catch (error) {
+    console.error(
+      "No se pudo registrar el consentimiento de cookies.",
+      error
+    );
+  }
+}
+
+/*
+ * ============================================================
+ * COMPONENTE
+ * ============================================================
+ */
 
 export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const [preferences, setPreferences] = useState<CookiePreferences>({
-    essential: true,
-    analytics: false,
-    marketing: false,
-  });
+  const [preferences, setPreferences] =
+    useState<CookiePreferences>(DEFAULT_PREFERENCES);
+
+  /*
+   * ============================================================
+   * INICIALIZACIÓN
+   * ============================================================
+   */
 
   useEffect(() => {
-    const savedPreferences = localStorage.getItem("cookiePreferences");
+    /*
+     * Siempre establecemos primero el estado seguro:
+     * Google Analytics / almacenamiento analítico denegado.
+     */
+    setDefaultConsent();
 
-    if (!savedPreferences) {
+    try {
+      const savedPreferences = localStorage.getItem(
+        COOKIE_PREFERENCES_KEY
+      );
+
+      /*
+       * Primera visita:
+       * no existe una decisión previa.
+       */
+      if (!savedPreferences) {
+        setPreferences(DEFAULT_PREFERENCES);
+        setShowBanner(true);
+
+        updateGoogleConsent(false);
+
+        return;
+      }
+
+      const parsedPreferences = JSON.parse(savedPreferences);
+
+      /*
+       * ========================================================
+       * COMPROBAR VERSIÓN DE LA POLÍTICA
+       * ========================================================
+       *
+       * Si la preferencia pertenece a una versión anterior,
+       * solicitamos nuevamente la decisión.
+       *
+       * Esto evita mantener indefinidamente un consentimiento
+       * basado en una versión antigua de la política.
+       */
+      if (
+        parsedPreferences?.policyVersion !== COOKIE_POLICY_VERSION
+      ) {
+        setPreferences(DEFAULT_PREFERENCES);
+        setShowBanner(true);
+
+        updateGoogleConsent(false);
+
+        return;
+      }
+
+      /*
+       * Normalizamos las preferencias almacenadas.
+       *
+       * essential siempre es true porque las tecnologías
+       * necesarias no forman parte de una opción voluntaria.
+       */
+      const normalizedPreferences: CookiePreferences = {
+        essential: true,
+        analytics: parsedPreferences?.analytics === true,
+        policyVersion: COOKIE_POLICY_VERSION,
+      };
+
+      setPreferences(normalizedPreferences);
+
+      /*
+       * Aplicar inmediatamente la decisión almacenada.
+       */
+      updateGoogleConsent(normalizedPreferences.analytics);
+
+      /*
+       * Solo cargar Google Analytics si existe consentimiento
+       * para analítica.
+       */
+      if (normalizedPreferences.analytics) {
+        loadGoogleAnalytics();
+      }
+    } catch (error) {
+      /*
+       * Si el almacenamiento está corrupto:
+       *
+       * - volvemos al estado seguro
+       * - no cargamos Analytics
+       * - solicitamos nuevamente las preferencias
+       */
+      console.error(
+        "No se pudieron cargar las preferencias de cookies.",
+        error
+      );
+
+      setPreferences(DEFAULT_PREFERENCES);
       setShowBanner(true);
-    } else {
-      const prefs = JSON.parse(savedPreferences);
-      setPreferences(prefs);
-      loadCookies(prefs);
+
+      updateGoogleConsent(false);
     }
   }, []);
 
-  const loadCookies = (prefs: CookiePreferences) => {
-    const endpoint = import.meta.env.VITE_ANALYTICS_ENDPOINT;
-    const websiteId = import.meta.env.VITE_ANALYTICS_WEBSITE_ID;
+  /*
+   * ============================================================
+   * GUARDAR PREFERENCIAS
+   * ============================================================
+   */
 
-    if (
-      prefs.analytics &&
-      endpoint &&
-      websiteId &&
-      !endpoint.startsWith("%") &&
-      !websiteId.startsWith("%")
-    ) {
-      const script = document.createElement("script");
+  const savePreferences = (
+    newPreferences: CookiePreferences
+  ) => {
+    const normalizedPreferences: CookiePreferences = {
+      essential: true,
+      analytics: newPreferences.analytics === true,
+      policyVersion: COOKIE_POLICY_VERSION,
+    };
 
-      script.src = `${endpoint}/umami`;
-      script.setAttribute("data-website-id", websiteId);
-      script.defer = true;
-
-      document.head.appendChild(script);
+    /*
+     * ========================================================
+     * GUARDAR LOCALMENTE
+     * ========================================================
+     *
+     * Se mantiene el mecanismo existente para recordar la
+     * decisión en el navegador.
+     */
+    try {
+      localStorage.setItem(
+        COOKIE_PREFERENCES_KEY,
+        JSON.stringify(normalizedPreferences)
+      );
+    } catch (error) {
+      console.error(
+        "No se pudieron guardar las preferencias de cookies.",
+        error
+      );
     }
-  };
 
-  const handleAcceptAll = () => {
-    const allAccepted = {
-      essential: true,
-      analytics: true,
-      marketing: true,
-    };
+    setPreferences(normalizedPreferences);
 
-    setPreferences(allAccepted);
+    /*
+     * ========================================================
+     * ACTUALIZAR GOOGLE CONSENT
+     * ========================================================
+     *
+     * Se mantiene exactamente el comportamiento existente.
+     */
+    updateGoogleConsent(normalizedPreferences.analytics);
 
-    localStorage.setItem(
-      "cookiePreferences",
-      JSON.stringify(allAccepted)
-    );
+    /*
+     * Si ha aceptado analítica, cargar Google Analytics.
+     */
+    if (normalizedPreferences.analytics) {
+      loadGoogleAnalytics();
+    }
 
-    loadCookies(allAccepted);
-    setShowBanner(false);
-  };
+    /*
+     * ========================================================
+     * REGISTRAR DECISIÓN EN SUPABASE
+     * ========================================================
+     *
+     * Se ejecuta sin bloquear el cierre del banner.
+     *
+     * Si Supabase no responde, el consentimiento local y el
+     * funcionamiento de la web no quedan bloqueados.
+     */
+    void recordCookieConsent(normalizedPreferences.analytics);
 
-  const handleRejectOptional = () => {
-    const minimal = {
-      essential: true,
-      analytics: false,
-      marketing: false,
-    };
-
-    setPreferences(minimal);
-
-    localStorage.setItem(
-      "cookiePreferences",
-      JSON.stringify(minimal)
-    );
-
-    setShowBanner(false);
-  };
-
-  const handleSavePreferences = () => {
-    localStorage.setItem(
-      "cookiePreferences",
-      JSON.stringify(preferences)
-    );
-
-    loadCookies(preferences);
-
+    /*
+     * Mantener el comportamiento actual del banner.
+     */
     setShowBanner(false);
     setShowSettings(false);
   };
 
   /*
    * ============================================================
-   * BOTÓN FLOTANTE DE COOKIES
+   * ACEPTAR
    * ============================================================
-   *
-   * Cuando el banner no está visible, mostramos únicamente
-   * un botón circular abajo a la derecha.
-   *
-   * El chatbot ocupará la posición inferior derecha principal.
-   * El botón de cookies queda debajo.
+   */
+
+  const handleAcceptAll = () => {
+    savePreferences({
+      essential: true,
+      analytics: true,
+      policyVersion: COOKIE_POLICY_VERSION,
+    });
+  };
+
+  /*
+   * ============================================================
+   * RECHAZAR
+   * ============================================================
+   */
+
+  const handleRejectOptional = () => {
+    savePreferences({
+      essential: true,
+      analytics: false,
+      policyVersion: COOKIE_POLICY_VERSION,
+    });
+  };
+
+  /*
+   * ============================================================
+   * GUARDAR CONFIGURACIÓN
+   * ============================================================
+   */
+
+  const handleSavePreferences = () => {
+    savePreferences(preferences);
+  };
+
+  /*
+   * ============================================================
+   * BOTÓN FLOTANTE
+   * ============================================================
    */
 
   if (!showBanner && !showSettings) {
@@ -115,8 +459,8 @@ export default function CookieBanner() {
       <button
         type="button"
         onClick={() => setShowSettings(true)}
-        aria-label="Gestionar cookies"
-        title="Gestionar cookies"
+        aria-label="Gestionar preferencias de cookies"
+        title="Gestionar preferencias de cookies"
         className="
           fixed
           bottom-6
@@ -184,9 +528,10 @@ export default function CookieBanner() {
                 </h3>
 
                 <p className="text-sm text-gray-600 md:mb-0">
-                  Utilizamos cookies esenciales para el funcionamiento de
-                  la web y opcionales para análisis y marketing. Puedes
-                  aceptar todas, rechazar las opcionales o configurar tus
+                  Utilizamos tecnologías necesarias para el funcionamiento
+                  de la web y, si das tu consentimiento, Google Analytics
+                  para analizar el uso de la web y mejorar nuestros
+                  servicios. Puedes aceptar, rechazar o configurar tus
                   preferencias.
                 </p>
               </div>
@@ -238,7 +583,7 @@ export default function CookieBanner() {
                     md:flex-none
                   "
                 >
-                  Aceptar todo
+                  Aceptar
                 </Button>
               </div>
             </div>
@@ -309,42 +654,47 @@ export default function CookieBanner() {
             {/* CONTENT */}
 
             <div className="space-y-6 p-6">
-              {/* Essential Cookies */}
+              {/* TECNOLOGÍAS NECESARIAS */}
 
               <div className="rounded-lg border border-gray-200 p-4">
                 <div className="mb-2 flex items-start justify-between">
                   <div>
                     <h3 className="font-bold text-gray-900">
-                      Cookies esenciales
+                      Tecnologías necesarias
                     </h3>
 
                     <p className="mt-1 text-sm text-gray-600">
-                      Necesarias para el funcionamiento básico de la web.
-                      No pueden desactivarse.
+                      Necesarias para el funcionamiento básico, la
+                      seguridad y las funcionalidades esenciales de la
+                      web. No pueden desactivarse.
                     </p>
                   </div>
 
                   <input
                     type="checkbox"
-                    checked={preferences.essential}
+                    checked={true}
                     disabled
+                    aria-label="Tecnologías necesarias siempre activas"
                     className="mt-1"
                   />
                 </div>
               </div>
 
-              {/* Analytics Cookies */}
+              {/* ANALÍTICA */}
 
               <div className="rounded-lg border border-gray-200 p-4">
                 <div className="mb-2 flex items-start justify-between">
                   <div>
                     <h3 className="font-bold text-gray-900">
-                      Cookies de análisis
+                      Analítica
                     </h3>
 
                     <p className="mt-1 text-sm text-gray-600">
-                      Nos ayudan a entender cómo usas la web para mejorar
-                      tu experiencia.
+                      Google Analytics se utiliza para obtener
+                      información estadística sobre el uso de la web
+                      y ayudarnos a analizar y mejorar nuestros
+                      servicios. Solo se activa si prestas tu
+                      consentimiento.
                     </p>
                   </div>
 
@@ -357,35 +707,7 @@ export default function CookieBanner() {
                         analytics: e.target.checked,
                       })
                     }
-                    className="mt-1 h-5 w-5 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Marketing Cookies */}
-
-              <div className="rounded-lg border border-gray-200 p-4">
-                <div className="mb-2 flex items-start justify-between">
-                  <div>
-                    <h3 className="font-bold text-gray-900">
-                      Cookies de marketing
-                    </h3>
-
-                    <p className="mt-1 text-sm text-gray-600">
-                      Utilizadas para mostrar anuncios relevantes y medir
-                      su efectividad.
-                    </p>
-                  </div>
-
-                  <input
-                    type="checkbox"
-                    checked={preferences.marketing}
-                    onChange={(e) =>
-                      setPreferences({
-                        ...preferences,
-                        marketing: e.target.checked,
-                      })
-                    }
+                    aria-label="Permitir Google Analytics"
                     className="mt-1 h-5 w-5 cursor-pointer"
                   />
                 </div>

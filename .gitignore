@@ -9,9 +9,7 @@ dist/
 .env
 .env.*
 
-# Logs
-.manus-logs/
-*.log
+
 
 # Sistema
 .DS_Store

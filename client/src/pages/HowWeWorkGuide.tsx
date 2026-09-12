@@ -190,8 +190,8 @@ export default function HowWeWorkGuide() {
       <header
         className={`fixed top-0 left-0 z-50 h-[80px] w-full transition-all duration-300 ${
           isScrolled
-            ? "bg-white/95 backdrop-blur-md shadow-lg border-b border-[#102A66]/10"
-            : "bg-gradient-to-r from-[#102A66] to-[#173B8F] shadow-lg"
+  ? "bg-white/95 backdrop-blur-md shadow-lg border-b border-[#102A66]/10"
+  : "bg-gradient-to-r from-[#102A66] to-[#173B8F] shadow-lg"
         }`}
       >
         <nav className="container mx-auto h-[80px] pl-10 pr-4 flex items-center justify-between">

@@ -613,10 +613,16 @@ const handleFormSubmit = async (e: React.FormEvent) => {
   return (
     <div className="min-h-screen bg-white">
       <style>{`
+  /* =========================================================
+     SCROLL REVEAL — EXISTENTE
+     ========================================================= */
+
   .scroll-reveal-item {
     opacity: 0;
     transform: translateY(16px);
-    transition: opacity 700ms ease-out, transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition:
+      opacity 700ms ease-out,
+      transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform, opacity;
   }
 
@@ -625,124 +631,587 @@ const handleFormSubmit = async (e: React.FormEvent) => {
     transform: translateY(0);
   }
 
+
+  /* =========================================================
+   MODIRA — HERO LIGHT RAYS / WIDE SPOTLIGHT
+   ========================================================= */
+
+.hero-ray {
+  position: absolute;
+  top: -10%;
+  left: 50%;
+  height: 170%;
+  transform-origin: top center;
+  pointer-events: none;
+  will-change: transform, opacity;
+  mix-blend-mode: normal;
+}
+
+
+/* =========================================================
+   RAYO 1 — IZQUIERDA
+   ========================================================= */
+
+.hero-ray-1 {
+  width: 260px;
+  background: linear-gradient(
+    to bottom,
+    rgba(72, 116, 220, 0.68) 0%,
+    rgba(40, 84, 184, 0.48) 25%,
+    rgba(23, 59, 143, 0.22) 55%,
+    transparent 100%
+  );
+  filter: blur(38px);
+  animation: modira-ray-1 18s ease-in-out infinite;
+}
+
+
+/* =========================================================
+   RAYO 2 — IZQUIERDA INTERIOR
+   ========================================================= */
+
+.hero-ray-2 {
+  width: 220px;
+  background: linear-gradient(
+    to bottom,
+    rgba(96, 139, 235, 0.78) 0%,
+    rgba(50, 96, 205, 0.55) 25%,
+    rgba(23, 59, 143, 0.24) 58%,
+    transparent 100%
+  );
+  filter: blur(34px);
+  animation: modira-ray-2 13s ease-in-out infinite;
+  animation-delay: -5s;
+}
+
+
+/* =========================================================
+   RAYO 3 — DERECHA INTERIOR
+   ========================================================= */
+
+.hero-ray-3 {
+  width: 235px;
+  background: linear-gradient(
+    to bottom,
+    rgba(72, 116, 220, 0.72) 0%,
+    rgba(40, 84, 184, 0.50) 28%,
+    rgba(23, 59, 143, 0.20) 58%,
+    transparent 100%
+  );
+  filter: blur(36px);
+  animation: modira-ray-3 16s ease-in-out infinite;
+  animation-delay: -10s;
+}
+
+
+/* =========================================================
+   RAYO 4 — IZQUIERDA EXTERIOR
+   ========================================================= */
+
+.hero-ray-4 {
+  width: 175px;
+  background: linear-gradient(
+    to bottom,
+    rgba(72, 116, 220, 0.58) 0%,
+    rgba(40, 84, 184, 0.38) 30%,
+    rgba(23, 59, 143, 0.14) 65%,
+    transparent 100%
+  );
+  filter: blur(42px);
+  animation: modira-ray-4 21s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+
+/* =========================================================
+   RAYO 5 — DERECHA EXTERIOR
+   ========================================================= */
+
+.hero-ray-5 {
+  width: 185px;
+
+  background: linear-gradient(
+    to bottom,
+    rgba(72, 116, 220, 0.60) 0%,
+    rgba(40, 84, 184, 0.38) 30%,
+    rgba(23, 59, 143, 0.14) 62%,
+    transparent 100%
+  );
+
+  filter: blur(34px);
+
+  animation: modira-ray-5 20s ease-in-out infinite;
+
+  animation-delay: -7s;
+}
+
+
+/* =========================================================
+   RAYO 6 — EXTERIOR
+   ========================================================= */
+
+.hero-ray-6 {
+  width: 145px;
+  background: linear-gradient(
+    to bottom,
+    rgba(96, 139, 235, 0.52) 0%,
+    rgba(40, 84, 184, 0.30) 38%,
+    transparent 82%
+  );
+  filter: blur(45px);
+  animation: modira-ray-6 14s ease-in-out infinite;
+  animation-delay: -3s;
+}
+/* =========================================================
+   MOVIMIENTO DINÁMICO — RAYOS DE SOL
+   Movimiento más marcado y orgánico
+   ========================================================= */
+
+@keyframes modira-ray-1 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-30deg) scaleX(0.95);
+    opacity: 0.56;
+  }
+
+  25% {
+    transform: translateX(-43%) rotate(-26deg) scaleX(1.01);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: translateX(-30%) rotate(-18deg) scaleX(1.07);
+    opacity: 0.90;
+  }
+
+  75% {
+    transform: translateX(-42%) rotate(-25deg) scaleX(1.01);
+    opacity: 0.68;
+  }
+}
+
+
+@keyframes modira-ray-2 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-17deg) scaleX(0.95);
+    opacity: 0.58;
+  }
+
+  25% {
+    transform: translateX(-62%) rotate(-10deg) scaleX(1.01);
+    opacity: 0.76;
+  }
+
+  50% {
+    transform: translateX(-76%) rotate(1deg) scaleX(1.08);
+    opacity: 0.96;
+  }
+
+  75% {
+    transform: translateX(-63%) rotate(-9deg) scaleX(1.01);
+    opacity: 0.72;
+  }
+}
+
+
+@keyframes modira-ray-3 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(8deg) scaleX(0.95);
+    opacity: 0.56;
+  }
+
+  25% {
+    transform: translateX(-70%) rotate(15deg) scaleX(1.02);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: translateX(-98%) rotate(27deg) scaleX(1.08);
+    opacity: 0.94;
+  }
+
+  75% {
+    transform: translateX(-68%) rotate(14deg) scaleX(1.01);
+    opacity: 0.68;
+  }
+}
+
+
+
+@keyframes modira-ray-4 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-47deg) scaleX(0.92);
+    opacity: 0.36;
+  }
+
+  25% {
+    transform: translateX(-41%) rotate(-42deg) scaleX(1);
+    opacity: 0.52;
+  }
+
+  50% {
+    transform: translateX(-27%) rotate(-33deg) scaleX(1.08);
+    opacity: 0.70;
+  }
+
+  75% {
+    transform: translateX(-40%) rotate(-41deg) scaleX(1);
+    opacity: 0.50;
+  }
+}
+
+
+@keyframes modira-ray-5 {
+
+  0%, 100% {
+    transform:
+      translateX(calc(-50% + 0px))
+      rotate(44deg)
+      scaleX(0.92);
+    opacity: 0.38;
+  }
+
+  25% {
+    transform:
+      translateX(calc(-50% + 35px))
+      rotate(50deg)
+      scaleX(1.01);
+    opacity: 0.52;
+  }
+
+  50% {
+    transform:
+      translateX(calc(-50% + 75px))
+      rotate(61deg)
+      scaleX(1.09);
+    opacity: 0.72;
+  }
+
+  75% {
+    transform:
+      translateX(calc(-50% + 28px))
+      rotate(48deg)
+      scaleX(1.01);
+    opacity: 0.50;
+  }
+
+}
+
+
+@keyframes modira-ray-6 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-60deg) scaleX(0.90);
+    opacity: 0.25;
+  }
+
+  25% {
+    transform: translateX(-35%) rotate(-53deg) scaleX(1);
+    opacity: 0.36;
+  }
+
+  50% {
+    transform: translateX(-12%) rotate(-40deg) scaleX(1.09);
+    opacity: 0.55;
+  }
+
+  75% {
+    transform: translateX(-34%) rotate(-52deg) scaleX(1);
+    opacity: 0.34;
+  }
+}
+/* =========================================================
+   GLOW CENTRAL — ANCHO Y CONCENTRADO EN EL ORIGEN
+   ========================================================= */
+
+.hero-main-glow {
+  position: absolute;
+  top: -260px;
+  left: 50%;
+  width: 105%;
+  height: 620px;
+  transform: translateX(-50%);
+
+  background:
+    radial-gradient(
+      ellipse 48% 90% at 50% 0%,
+      rgba(96, 139, 235, 0.95) 0%,
+      rgba(72, 116, 220, 0.82) 22%,
+      rgba(40, 84, 184, 0.55) 42%,
+      rgba(23, 59, 143, 0.25) 63%,
+      rgba(16, 42, 102, 0.08) 78%,
+      transparent 100%
+    );
+
+  filter: blur(12px);
+
+  animation: modira-main-glow 18s ease-in-out infinite;
+
+  will-change: transform, opacity;
+}
+
+
+@keyframes modira-main-glow {
+  0%, 100% {
+    opacity: 0.82;
+    transform: translateX(-50%) scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.04);
+  }
+}
+  /* =========================================================
+     GRID
+     ========================================================= */
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+
+    background-image:
+      linear-gradient(
+        rgba(255, 255, 255, 0.10) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.10) 1px,
+        transparent 1px
+      );
+
+    background-size: 42px 42px;
+
+    opacity: 0.65;
+
+    mask-image:
+      linear-gradient(
+        to bottom,
+        black 0%,
+        black 55%,
+        transparent 100%
+      );
+
+    -webkit-mask-image:
+      linear-gradient(
+        to bottom,
+        black 0%,
+        black 55%,
+        transparent 100%
+      );
+  }
+
+
+  /* =========================================================
+     ENTRADA DEL HERO
+     ========================================================= */
+
+  .hero-fade-in {
+    opacity: 0;
+    transform: translateY(18px);
+    animation: modira-hero-fade-in 0.7s ease-out forwards;
+  }
+
+
+  @keyframes modira-hero-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+
+  /* =========================================================
+     REDUCED MOTION
+     ========================================================= */
+
   @media (prefers-reduced-motion: reduce) {
+
     .scroll-reveal-item {
       opacity: 1 !important;
       transform: none !important;
       filter: none !important;
       transition: none !important;
     }
+
+    .hero-ray,
+    .hero-main-glow,
+    .hero-fade-in {
+      animation: none !important;
+    }
+
+    .hero-fade-in {
+      opacity: 1 !important;
+      transform: none !important;
+    }
   }
 `}</style>
 
      <Header />
 
-{/* Hero Section - Premium Dark Blue Gradient */}
-<section className="pt-42 pb-20 md:pb-26 bg-gradient-to-br from-[#102A66] via-[#173B8F] to-[#2854B8] relative overflow-hidden">
-  {/* Background decorative elements */}
-  <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -mr-48 -mt-48"></div>
-  <div className="absolute bottom-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -ml-48 -mb-48"></div>
+{/* =========================================================
+    HERO — MODIRA / LIGHT RAYS
+    ========================================================= */}
 
-  <div className="container mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 xl:px-16 relative z-10">
-    <div className="grid md:grid-cols-2 gap-12 items-center">
-      
-      <div className="space-y-7">
-        
-        <h1 className="text-[40px] md:text-[44px] lg:text-[47px] font-bold text-white leading-[1.25] tracking-[0em]">
-          Automatiza tu empresa,
-          <br />
-          libera tu equipo
-        </h1>
+<section className="relative min-h-screen h-screen overflow-hidden bg-[#0A1838]">
 
-        {/* Subtítulo */}
-        <p className="max-w-[620px] text-[17px] md:text-[18px] text-white/85 leading-[1.5]">
-          Menos trabajo manual. Más tiempo para hacer crecer tu negocio.
-        </p>
+  {/* =======================================================
+      LIGHT RAYS — fondo compartido con el Header
+      ======================================================= */}
 
-        {/* Flujo de beneficios */}
-        <div className="flex flex-nowrap items-center text-[15px] md:text-[16px] font-medium text-white/90">
+  <div className="pointer-events-none absolute inset-0 overflow-hidden">
 
-          {/* Elimina tareas */}
-          <span className="flex items-center gap-2 whitespace-nowrap">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 border border-white/10 text-[11px]">
-              ✓
-            </span>
-            Elimina tareas
-          </span>
+    {/* Fondo base */}
+    <div className="absolute inset-0 bg-[#0A1838]" />
 
-          {/* Conector */}
-          <span className="mx-3 md:mx-4 text-[22px] font-light text-white/35">
-            ›
-          </span>
+    {/* Glow central superior */}
+    <div className="hero-main-glow" />
 
-          {/* Conecta herramientas */}
-          <span className="flex items-center gap-2 whitespace-nowrap">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 border border-white/10 text-[11px]">
-              ✓
-            </span>
-            Conecta herramientas
-          </span>
+    {/* Rayos */}
+    <div className="hero-ray hero-ray-1" />
+    <div className="hero-ray hero-ray-2" />
+    <div className="hero-ray hero-ray-3" />
+    <div className="hero-ray hero-ray-4" />
+    <div className="hero-ray hero-ray-5" />
+    <div className="hero-ray hero-ray-6" />
 
-          {/* Conector */}
-          <span className="mx-3 md:mx-4 text-[22px] font-light text-white/35">
-            ›
-          </span>
+    {/* Grid */}
+    <div className="hero-grid" />
 
-          {/* Gana tiempo */}
-          <span className="flex items-center gap-2 whitespace-nowrap">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 border border-white/10 text-[11px]">
-              ✓
-            </span>
-            Gana tiempo
-          </span>
+    {/* Oscurecimiento lateral */}
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(10,24,56,0.35)_70%,rgba(10,24,56,0.75)_100%)]" />
 
-        </div>
+    {/* Fade inferior */}
+    <div className="absolute bottom-0 left-0 right-0 h-[30%] bg-gradient-to-t from-[#0A1838] via-[#0A1838]/70 to-transparent" />
 
-        <div className="flex flex-col sm:flex-row gap-8 pt-4">
-          <Button
-            size="lg"
-            className="bg-white text-[#102A66] hover:bg-[#F4F6F9] text-base font-semibold px-8 shadow-lg hover:shadow-xl transition-all"
-            onClick={() =>
-              document
-                .getElementById("auditoria")
-                ?.scrollIntoView({ behavior: "smooth" })
-            }
-          >
-            Solicita tu auditoría gratuita
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+  </div>
 
-          <Button
-            size="lg"
-            variant="outline"
-            className="text-white border-white/30 hover:bg-white/10 text-base font-semibold px-8"
-            onClick={() =>
-              document
-                .getElementById("casos-exito")
-                ?.scrollIntoView({ behavior: "smooth" })
-            }
-          >
-            Ver casos de éxito
-          </Button>
-        </div>
 
-      </div>
+  {/* =======================================================
+    CONTENIDO
+    ======================================================= */}
 
-      <div className="relative hidden md:block">
-        <video
-          src="/Images/modira_video_loop.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="rounded-2xl shadow-2xl w-full h-auto"
-        />
-      </div>
+<div className="relative z-10 flex h-full items-center justify-center px-5 pb-20 pt-32 sm:px-8 md:px-8 md:pb-24 md:pt-32">
+  <div className="mx-auto flex w-full max-w-[1000px] flex-col items-center text-center">
+
+
+    {/* ===================================================
+        TITULAR
+        =================================================== */}
+
+    <h1
+      className="hero-fade-in max-w-[900px] text-[36px] font-bold leading-[1.08] tracking-[0.015em] text-white sm:text-[40px] md:text-[46px] lg:text-[50px]"
+      style={{ animationDelay: "0.15s" }}
+    >
+      Automatiza tu empresa,
+      <br />
+      libera tu equipo
+    </h1>
+
+
+    {/* ===================================================
+        SUBTÍTULO
+        =================================================== */}
+
+    <p
+      className="hero-fade-in mt-6 max-w-[650px] text-[16px] leading-[1.55] text-white/70 sm:text-[17px] md:text-[18px]"
+      style={{ animationDelay: "0.30s" }}
+    >
+      Menos trabajo manual. Más tiempo para hacer crecer tu negocio.
+    </p>
+
+
+    {/* ===================================================
+        FLUJO DE BENEFICIOS
+        =================================================== */}
+
+    <div
+      className="hero-fade-in mt-8 flex flex-wrap items-center justify-center text-[14px] font-medium text-white/80 sm:text-[15px]"
+      style={{ animationDelay: "0.45s" }}
+    >
+
+      {/* Elimina tareas */}
+      <span className="flex items-center gap-2 whitespace-nowrap">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-white/15 bg-white/10 text-[10px] text-white">
+          ✓
+        </span>
+        Elimina tareas
+      </span>
+
+      <span className="mx-3 text-[20px] font-light text-white/25 sm:mx-5">
+        ›
+      </span>
+
+      {/* Conecta herramientas */}
+      <span className="flex items-center gap-2 whitespace-nowrap">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-white/15 bg-white/10 text-[10px] text-white">
+          ✓
+        </span>
+        Conecta herramientas
+      </span>
+
+      <span className="mx-3 text-[20px] font-light text-white/25 sm:mx-5">
+        ›
+      </span>
+
+      {/* Gana tiempo */}
+      <span className="flex items-center gap-2 whitespace-nowrap">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-white/15 bg-white/10 text-[10px] text-white">
+          ✓
+        </span>
+        Gana tiempo
+      </span>
 
     </div>
-  </div>
-</section>    {/* <div className="h-6 bg-gradient-to-b from-[#2854B8] to-[#F4F6F9]" /> para difuminar el final del azul*/}
 
+
+    {/* ===================================================
+        BOTONES
+        =================================================== */}
+
+    <div
+      className="hero-fade-in mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4"
+      style={{ animationDelay: "0.60s" }}
+    >
+
+      <Button
+        size="lg"
+        className="h-12 rounded-lg bg-white px-7 text-[15px] font-semibold text-[#102A66] shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#F4F6F9] hover:shadow-xl sm:h-13 sm:px-8"
+        onClick={() =>
+          document
+            .getElementById("auditoria")
+            ?.scrollIntoView({ behavior: "smooth" })
+        }
+      >
+        Solicita tu auditoría gratuita
+        <ArrowRight className="ml-2 h-4 w-4" />
+      </Button>
+
+
+      <Button
+        size="lg"
+        variant="outline"
+        className="h-12 rounded-lg border-white/20 bg-white/[0.02] px-7 text-[15px] font-semibold text-white backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/10 sm:h-13 sm:px-8"
+        onClick={() =>
+          document
+            .getElementById("casos-exito")
+            ?.scrollIntoView({ behavior: "smooth" })
+        }
+      >
+        Ver casos de éxito
+      </Button>
+
+    </div>
+
+  </div>
+
+</div>
+
+</section>
     {/* Statistics Section - Premium Cards */}
 <section className="py-10 md:py-14 bg-[#F4F6F9]">
   <div className="container mx-auto px-6 sm:px-8 lg:px-12 xl:px-16">
