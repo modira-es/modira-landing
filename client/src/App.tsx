@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import ClientRoute from "@/components/ClientRoute";
+
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -11,15 +11,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
-import ResetPassword from "./pages/ResetPassword";
-import QuotationView from "./pages/QuotationView";
-import ClientArea from "./pages/ClientArea";
-import Billing from "./pages/Billing";
-import DocumentsList from "./pages/DocumentsList";
-import ProjectsList from "./components/ProjectsList";
-import Quotations from "./pages/Quotations";
-import Support from "./pages/Support";
-import ClientMaintenance from "./pages/ClientMaintenance";
+
 
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookiePolicy from "./pages/CookiePolicy";
@@ -41,16 +33,16 @@ function Router() {
 
       {/* Autenticación de clientes */}
       <Route path="/auth" component={Auth} />
-      <Route
+      {/* <Route
         path="/auth/reset-password"
         component={ResetPassword}
-      />
+      /> */}
 
       {/* Presupuesto individual */}
-      <Route
+      {/* <Route
         path="/presupuesto/:id"
         component={QuotationView}
-      />
+      /> */}
 
       {/* Guías públicas */}
       <Route
@@ -78,7 +70,7 @@ function Router() {
         component={AuditConditions}
       />
 
-      {/* Área de cliente */}
+      {/* Área de cliente
       <Route
         path="/area-cliente"
         component={() => (
@@ -146,7 +138,7 @@ function Router() {
       <ClientMaintenance />
     </ClientRoute>
   )}
-/>
+/> */}
 
       {/* Documentación legal */}
       <Route
