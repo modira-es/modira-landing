@@ -24,7 +24,9 @@ if (!supabaseServiceRoleKey) {
   );
 }
 
-const stripe = new Stripe(stripeSecretKey);
+const stripe = new Stripe(stripeSecretKey, {
+  apiVersion: "2025-08-27.basil",
+});
 
 const supabase = createClient(
   supabaseUrl,
@@ -176,13 +178,113 @@ Deno.serve(async (request) => {
     paymentIntent: Stripe.PaymentIntent,
     checkoutSessionId: string | null = null
   ) => {
-    const invoiceId =
-      paymentIntent.metadata?.invoice_id;
+    const invoiceId = paymentIntent.metadata?.invoice_id;
 
     if (!invoiceId) {
-      throw new Error(
-        `PaymentIntent ${paymentIntent.id} no contiene metadata.invoice_id`
+      // Otros PaymentIntents de Stripe pueden pertenecer a pagos ajenos a Modira.
+      console.log(`PaymentIntent ${paymentIntent.id} sin metadata.invoice_id; se ignora.`);
+      return null;
+    }
+
+    // Si este pago procede del nuevo flujo fiscal, adjuntamos el PaymentIntent
+    // a la factura de Stripe para que la factura quede marcada como pagada allí.
+    const stripeInvoiceId = paymentIntent.metadata?.stripe_invoice_id;
+
+    if (paymentIntent.status === "succeeded" && stripeInvoiceId) {
+      const stripeInvoice = await stripe.invoices.retrieve(
+        stripeInvoiceId,
+        {
+          expand: ["payments.data.payment.payment_intent"],
+        },
       );
+      const invoiceWithPayments = stripeInvoice as Stripe.Invoice & {
+        payments?: {
+          data?: Array<{
+            payment?: {
+              payment_intent?: string | Stripe.PaymentIntent | null;
+            } | null;
+          }>;
+        };
+      };
+      const paymentEntries =
+        invoiceWithPayments.payments?.data ?? [];
+      const alreadyAttached = paymentEntries.some((entry) => {
+        const attached = entry.payment?.payment_intent;
+        const attachedId = typeof attached === "string"
+          ? attached
+          : attached?.id;
+
+        return attachedId === paymentIntent.id;
+      });
+      const invoiceCustomerId =
+        typeof stripeInvoice.customer === "string"
+          ? stripeInvoice.customer
+          : stripeInvoice.customer?.id;
+      const paymentCustomerId =
+        typeof paymentIntent.customer === "string"
+          ? paymentIntent.customer
+          : paymentIntent.customer?.id;
+
+      if (
+        stripeInvoice.metadata?.invoice_id !== invoiceId ||
+        stripeInvoice.currency !== paymentIntent.currency ||
+        stripeInvoice.total !== paymentIntent.amount ||
+        !invoiceCustomerId ||
+        !paymentCustomerId ||
+        invoiceCustomerId !== paymentCustomerId
+      ) {
+        throw new Error(
+          `PaymentIntent ${paymentIntent.id} no coincide con la factura fiscal ${stripeInvoiceId}`,
+        );
+      }
+
+      if (!alreadyAttached) {
+        if (
+          stripeInvoice.status !== "open" ||
+          stripeInvoice.amount_due !== paymentIntent.amount
+        ) {
+          throw new Error(
+            `La factura de Stripe ${stripeInvoiceId} no admite el pago ${paymentIntent.id}`,
+          );
+        }
+
+        await stripe.invoices.attachPayment(stripeInvoiceId, {
+          payment_intent: paymentIntent.id,
+        });
+      }
+
+      const confirmedInvoice = alreadyAttached
+        ? stripeInvoice
+        : await stripe.invoices.retrieve(stripeInvoiceId, {
+          expand: ["payments.data.payment.payment_intent"],
+        });
+      const confirmedPayments =
+        (confirmedInvoice as Stripe.Invoice & {
+          payments?: {
+            data?: Array<{
+              payment?: {
+                payment_intent?: string | Stripe.PaymentIntent | null;
+              } | null;
+            }>;
+          };
+        }).payments?.data ?? [];
+      const paymentIsAttached = confirmedPayments.some((entry) => {
+        const attached = entry.payment?.payment_intent;
+        const attachedId = typeof attached === "string"
+          ? attached
+          : attached?.id;
+
+        return attachedId === paymentIntent.id;
+      });
+
+      if (
+        confirmedInvoice.status !== "paid" ||
+        !paymentIsAttached
+      ) {
+        throw new Error(
+          `Stripe no confirmó como pagada la factura ${stripeInvoiceId} con el pago ${paymentIntent.id}`,
+        );
+      }
     }
 
     let status: string;
@@ -212,6 +314,18 @@ switch (paymentIntent.status) {
         ? new Date().toISOString()
         : null;
 
+    if (
+      !checkoutSessionId &&
+      paymentIntent.status === "succeeded"
+    ) {
+      const sessions = await stripe.checkout.sessions.list({
+        payment_intent: paymentIntent.id,
+        limit: 1,
+      });
+
+      checkoutSessionId = sessions.data[0]?.id ?? null;
+    }
+
     const { data, error } = await supabase.rpc(
       "register_stripe_invoice_payment",
       {
@@ -237,6 +351,45 @@ switch (paymentIntent.status) {
       );
     }
 
+    if (stripeInvoiceId || checkoutSessionId) {
+      const paymentLink: {
+        stripe_invoice_id?: string;
+        stripe_checkout_session_id?: string;
+      } = {};
+
+      if (stripeInvoiceId) {
+        paymentLink.stripe_invoice_id = stripeInvoiceId;
+      }
+
+      if (checkoutSessionId) {
+        paymentLink.stripe_checkout_session_id =
+          checkoutSessionId;
+      }
+
+      const {
+        data: linkedPayment,
+        error: paymentLinkError,
+      } = await supabase
+        .from("payments")
+        .update(paymentLink)
+        .eq("invoice_id", invoiceId)
+        .eq("stripe_payment_intent_id", paymentIntent.id)
+        .select("id")
+        .maybeSingle();
+
+      if (paymentLinkError) {
+        throw new Error(
+          `Error vinculando el pago ${paymentIntent.id} con la factura de Stripe: ${paymentLinkError.message}`,
+        );
+      }
+
+      if (!linkedPayment) {
+        throw new Error(
+          `No se encontró el pago ${paymentIntent.id} para vincularlo con la factura de Stripe`,
+        );
+      }
+    }
+
     return data;
   };
 
@@ -259,10 +412,30 @@ switch (paymentIntent.status) {
       event.type ===
       "checkout.session.completed"
     ) {
-      console.log(
-        "Checkout Session completada:",
-        event.data.object.id
-      );
+      const session =
+        event.data.object as Stripe.Checkout.Session;
+
+      console.log("Checkout Session completada:", session.id);
+
+      if (session.payment_status === "paid") {
+        if (!session.payment_intent) {
+          throw new Error(
+            `Checkout Session ${session.id} no tiene PaymentIntent`,
+          );
+        }
+
+        const paymentIntent =
+          await stripe.paymentIntents.retrieve(
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent.id,
+          );
+
+        await registerPaymentIntent(
+          paymentIntent,
+          session.id,
+        );
+      }
     }
 
     /*
@@ -296,7 +469,6 @@ switch (paymentIntent.status) {
         session.id
       );
     }
-
     /*
      * ==========================================================
      * CHECKOUT ASYNC PAYMENT FAILED

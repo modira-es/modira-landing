@@ -478,5 +478,5 @@ USING (
         WHERE qsd.signed_document_path = storage.objects.name
     )
 );
-
+GRANT UPDATE ON TABLE public.invoices TO service_role;
 COMMIT;

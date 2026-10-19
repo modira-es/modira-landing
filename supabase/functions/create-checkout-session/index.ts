@@ -246,6 +246,145 @@ const truncateForStripe = (
   return `${text.slice(0, maxLength - 3).trim()}...`;
 };
 
+const parseScaledAmount = (
+  value: unknown,
+  label: string,
+): bigint => {
+  const match = String(value ?? "")
+    .trim()
+    .match(/^(\d+)(?:\.(\d{1,2}))?$/);
+
+  if (!match) {
+    throw new Error(`${label} no es un importe válido`);
+  }
+
+  const whole = BigInt(match[1]);
+  const fraction = BigInt(
+    (match[2] ?? "").padEnd(2, "0"),
+  );
+
+  return whole * 100n + fraction;
+};
+
+const parseRateBasisPoints = (
+  value: unknown,
+  label: string,
+): bigint => {
+  const match = String(value ?? "")
+    .trim()
+    .match(/^(\d+)(?:\.(\d{1,2}))?$/);
+
+  if (!match) {
+    throw new Error(`${label} no es un porcentaje válido`);
+  }
+
+  return BigInt(match[1]) * 100n +
+    BigInt((match[2] ?? "").padEnd(2, "0"));
+};
+
+const calculateTaxCents = (
+  baseCents: bigint,
+  rateBasisPoints: bigint,
+): bigint => (
+  baseCents * rateBasisPoints + 5_000n
+) / 10_000n;
+
+const getValidatedTaxBreakdown = (
+  invoice: Record<string, unknown>,
+) => {
+  const subtotalCents = parseScaledAmount(
+    invoice.subtotal,
+    "La base imponible",
+  );
+  const vatCents = parseScaledAmount(
+    invoice.iva_importe,
+    "El importe de IVA",
+  );
+  const withholdingCents = parseScaledAmount(
+    invoice.irpf_importe,
+    "El importe de IRPF",
+  );
+  const grossCents = parseScaledAmount(
+    invoice.monto,
+    "El importe bruto",
+  );
+  const amountToPayCents = parseScaledAmount(
+    invoice.importe_a_pagar,
+    "El importe a pagar",
+  );
+  const vatRate = parseRateBasisPoints(
+    invoice.iva_porcentaje,
+    "El porcentaje de IVA",
+  );
+  const withholdingRate = parseRateBasisPoints(
+    invoice.irpf_porcentaje,
+    "El porcentaje de IRPF",
+  );
+  const vatApplied = invoice.iva_aplicado;
+  const withholdingApplied = invoice.irpf_aplicado;
+
+  if (
+    typeof vatApplied !== "boolean" ||
+    typeof withholdingApplied !== "boolean"
+  ) {
+    throw new Error("La configuración fiscal de la factura no es válida");
+  }
+
+  if (vatRate > 10_000n || withholdingRate > 10_000n) {
+    throw new Error("Los porcentajes fiscales exceden el máximo permitido");
+  }
+
+  if (
+    (!vatApplied && (vatRate !== 0n || vatCents !== 0n)) ||
+    (!withholdingApplied &&
+      (withholdingRate !== 0n || withholdingCents !== 0n)) ||
+    (withholdingApplied && withholdingRate === 0n)
+  ) {
+    throw new Error("Los indicadores fiscales no coinciden con sus importes");
+  }
+
+  const expectedVatCents = vatApplied
+    ? calculateTaxCents(subtotalCents, vatRate)
+    : 0n;
+  const expectedWithholdingCents = withholdingApplied
+    ? calculateTaxCents(subtotalCents, withholdingRate)
+    : 0n;
+  const expectedGrossCents = subtotalCents + expectedVatCents;
+  const expectedAmountToPayCents =
+    expectedGrossCents - expectedWithholdingCents;
+
+  if (
+    expectedVatCents !== vatCents ||
+    expectedWithholdingCents !== withholdingCents ||
+    expectedGrossCents !== grossCents ||
+    expectedAmountToPayCents !== amountToPayCents ||
+    amountToPayCents <= 0n
+  ) {
+    throw new Error(
+      "El desglose fiscal no coincide con el importe final de la factura",
+    );
+  }
+
+  const maxSafeCents = BigInt(Number.MAX_SAFE_INTEGER);
+
+  if (
+    subtotalCents > maxSafeCents ||
+    vatCents > maxSafeCents ||
+    withholdingCents > maxSafeCents ||
+    amountToPayCents > maxSafeCents
+  ) {
+    throw new Error("Los importes de la factura exceden el límite permitido");
+  }
+
+  return {
+    subtotalCents: Number(subtotalCents),
+    vatCents: Number(vatCents),
+    withholdingCents: Number(withholdingCents),
+    amountToPayCents: Number(amountToPayCents),
+    vatRatePercent: Number(vatRate) / 100,
+  };
+};
+
 // ============================================================
 // EDGE FUNCTION
 // ============================================================
@@ -561,11 +700,20 @@ Deno.serve(async (req) => {
           company_id,
           numero_factura,
           estado,
+          monto,
+          subtotal,
+          iva_aplicado,
+          iva_porcentaje,
+          iva_importe,
+          irpf_aplicado,
+          irpf_porcentaje,
+          irpf_importe,
           importe_a_pagar,
           descripcion,
           fecha_vencimiento,
           document_path,
-          document_sha256
+          document_sha256,
+          stripe_invoice_id
         `,
       )
       .eq("id", invoiceId)
@@ -796,30 +944,32 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================
-    // 20. IMPORTE REAL
-    // ========================================================
-    //
-    // El importe siempre procede de la BD.
-    // Nunca del frontend.
+    // 20. VALIDAR DESGLOSE FISCAL
     // ========================================================
 
-    const amountInEuros = Number(
-      invoice.importe_a_pagar,
-    );
+    let taxBreakdown: ReturnType<
+      typeof getValidatedTaxBreakdown
+    >;
 
-    if (
-      !Number.isFinite(amountInEuros) ||
-      amountInEuros <= 0
-    ) {
+    try {
+      taxBreakdown = getValidatedTaxBreakdown(
+        invoice as Record<string, unknown>,
+      );
+    } catch (error) {
       console.error(
-        "[create-checkout-session] Importe inválido:",
-        invoice.importe_a_pagar,
+        "[create-checkout-session] Desglose fiscal inválido:",
+        {
+          invoiceId: invoice.id,
+          error,
+        },
       );
 
       return jsonResponse(
         {
-          error:
-            "El importe de la factura no es válido",
+          error: error instanceof Error
+            ? error.message
+            : "El desglose fiscal de la factura no es válido",
+          code: "INVOICE_TAX_BREAKDOWN_INVALID",
         },
         400,
         corsHeaders,
@@ -827,23 +977,10 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================
-    // 21. EUROS → CÉNTIMOS
+    // 21. IMPORTE FINAL EN CÉNTIMOS
     // ========================================================
 
-    const amountInCents = Math.round(
-      amountInEuros * 100,
-    );
-
-    if (amountInCents <= 0) {
-      return jsonResponse(
-        {
-          error:
-            "El importe calculado para Stripe no es válido",
-        },
-        400,
-        corsHeaders,
-      );
-    }
+    const amountInCents = taxBreakdown.amountToPayCents;
 
     // ========================================================
     // 22. APP URL
@@ -913,78 +1050,393 @@ Deno.serve(async (req) => {
       );
 
     // ========================================================
-    // 24. CREAR CHECKOUT SESSION
+    // 24. PREPARAR FACTURA FISCAL DE STRIPE
     // ========================================================
+    let stripeInvoice: Stripe.Invoice;
+    let stripeCustomerId: string;
 
-    let session: Stripe.Checkout.Session;
+    if (invoice.stripe_invoice_id) {
+      stripeInvoice = await stripe.invoices.retrieve(
+        String(invoice.stripe_invoice_id),
+      );
 
-    try {
-      session =
-        await stripe.checkout.sessions.create({
-          mode: "payment",
-
-          line_items: [
-            {
-              price_data: {
-                currency: "eur",
-
-                product_data: {
-                  name: stripeProductName,
-                  description:
-                    stripeDescription,
-                },
-
-                unit_amount:
-                  amountInCents,
-              },
-
-              quantity: 1,
-            },
-          ],
-
+      const customer = stripeInvoice.customer;
+      stripeCustomerId = typeof customer === "string"
+        ? customer
+        : customer?.id ?? "";
+    } else {
+      const customer = await stripe.customers.create(
+        {
+          email: user.email || undefined,
           metadata: {
             invoice_id: invoice.id,
-            company_id:
-              invoice.company_id || "",
             user_id: invoice.user_id,
+            company_id: invoice.company_id || "",
           },
+        },
+        {
+          idempotencyKey: `modira-invoice-customer-${invoice.id}`,
+        },
+      );
+      stripeCustomerId = customer.id;
 
-          payment_intent_data: {
+      stripeInvoice = await stripe.invoices.create(
+        {
+          customer: stripeCustomerId,
+          collection_method: "send_invoice",
+          days_until_due: 30,
+          auto_advance: false,
+          description: stripeDescription,
+          metadata: {
+            invoice_id: invoice.id,
+            invoice_number: invoiceNumber,
+            company_id: invoice.company_id || "",
+            user_id: invoice.user_id,
+            source: "modira_invoice_checkout",
+          },
+        },
+        {
+          idempotencyKey: `modira-fiscal-invoice-${invoice.id}`,
+        },
+      );
+    }
+
+    if (!stripeCustomerId) {
+      throw new Error(
+        "La factura de Stripe no tiene un cliente asociado",
+      );
+    }
+
+    const stripeInvoiceId = stripeInvoice.id;
+
+    if (!stripeInvoiceId) {
+      throw new Error(
+        "Stripe no ha devuelto el identificador de la factura fiscal",
+      );
+    }
+
+    if (
+      stripeInvoice.metadata?.invoice_id !== invoice.id
+    ) {
+      throw new Error(
+        "La factura de Stripe vinculada no corresponde a esta factura",
+      );
+    }
+
+    if (
+      stripeInvoice.status === "paid" ||
+      stripeInvoice.status === "void" ||
+      stripeInvoice.status === "uncollectible"
+    ) {
+      return jsonResponse(
+        {
+          error:
+            "La factura fiscal de Stripe ya no admite nuevos pagos",
+          code: "STRIPE_INVOICE_NOT_PAYABLE",
+        },
+        409,
+        corsHeaders,
+      );
+    }
+
+    if (stripeInvoice.status === "draft") {
+      const {
+        data: linkedInvoice,
+        error: linkError,
+      } = await supabaseAdmin
+        .from("invoices")
+        .update({
+          stripe_invoice_id: stripeInvoiceId,
+        })
+        .eq("id", invoice.id)
+        .is("stripe_invoice_id", null)
+        .select("stripe_invoice_id")
+        .maybeSingle();
+
+      if (linkError) {
+        throw new Error(
+          `No se ha podido vincular la factura de Stripe: ${linkError.message}`,
+        );
+      }
+
+      if (!linkedInvoice) {
+        const {
+          data: currentInvoice,
+          error: currentInvoiceError,
+        } = await supabaseAdmin
+          .from("invoices")
+          .select("stripe_invoice_id")
+          .eq("id", invoice.id)
+          .maybeSingle();
+
+        if (currentInvoiceError) {
+          throw new Error(
+            `No se ha podido verificar la factura de Stripe vinculada: ${currentInvoiceError.message}`,
+          );
+        }
+
+        if (
+          currentInvoice?.stripe_invoice_id !== stripeInvoiceId
+        ) {
+          throw new Error(
+            "La factura ya tiene vinculada otra factura de Stripe",
+          );
+        }
+      }
+
+      let taxRateId: string | undefined;
+
+      if (
+        invoice.iva_aplicado &&
+        taxBreakdown.vatRatePercent > 0
+      ) {
+        const taxRate = await stripe.taxRates.create(
+          {
+            display_name: "IVA",
+            percentage: taxBreakdown.vatRatePercent,
+            inclusive: false,
+            country: "ES",
             metadata: {
               invoice_id: invoice.id,
-              company_id:
-                invoice.company_id || "",
-              user_id: invoice.user_id,
             },
           },
+          {
+            idempotencyKey: `modira-invoice-iva-${invoice.id}`,
+          },
+        );
 
-          success_url:
-            `${appUrl}/area-cliente/facturacion?payment=success&invoice_id=${invoice.id}`,
+        taxRateId = taxRate.id;
+      }
 
-          cancel_url:
-            `${appUrl}/area-cliente/facturacion?payment=cancelled&invoice_id=${invoice.id}`,
+      await stripe.invoiceItems.create(
+        {
+          customer: stripeCustomerId,
+          invoice: stripeInvoiceId,
+          amount: taxBreakdown.subtotalCents,
+          currency: "eur",
+          description: stripeProductName,
+          ...(taxRateId ? { tax_rates: [taxRateId] } : {}),
+          metadata: {
+            invoice_id: invoice.id,
+            component: "base_imponible",
+          },
+        },
+        {
+          idempotencyKey: `modira-invoice-base-${invoice.id}`,
+        },
+      );
 
-          customer_email:
-            user.email || undefined,
-        });
-    } catch (stripeError) {
+      if (taxBreakdown.withholdingCents > 0) {
+        await stripe.invoiceItems.create(
+          {
+            customer: stripeCustomerId,
+            invoice: stripeInvoiceId,
+            amount: -taxBreakdown.withholdingCents,
+            currency: "eur",
+            description:
+              `Retención IRPF (${Number(invoice.irpf_porcentaje)}% sobre la base imponible)`,
+            metadata: {
+              invoice_id: invoice.id,
+              component: "retencion_irpf",
+            },
+          },
+          {
+            idempotencyKey: `modira-invoice-irpf-${invoice.id}`,
+          },
+        );
+      }
+
+      try {
+        stripeInvoice = await stripe.invoices.finalizeInvoice(
+          stripeInvoiceId,
+          {},
+          {
+            idempotencyKey: `modira-finalize-invoice-${invoice.id}`,
+          },
+        );
+      } catch (finalizeError) {
+        const currentStripeInvoice =
+          await stripe.invoices.retrieve(stripeInvoiceId);
+
+        if (currentStripeInvoice.status !== "open") {
+          throw finalizeError;
+        }
+
+        stripeInvoice = currentStripeInvoice;
+      }
+    }
+
+    if (
+      stripeInvoice.status !== "open" ||
+      stripeInvoice.currency !== "eur" ||
+      stripeInvoice.amount_due !== amountInCents
+    ) {
       console.error(
-        "[create-checkout-session] ERROR DE STRIPE:",
-        stripeError,
+        "[create-checkout-session] Factura fiscal de Stripe no coincide con Supabase:",
+        {
+          invoiceId: invoice.id,
+          stripeInvoiceId: stripeInvoice.id,
+          stripeStatus: stripeInvoice.status,
+          stripeAmountDue: stripeInvoice.amount_due,
+          expectedAmount: amountInCents,
+        },
       );
 
       return jsonResponse(
         {
           error:
-            stripeError instanceof Error
-              ? stripeError.message
-              : "Stripe ha rechazado la creación del Checkout",
-          code:
-            "STRIPE_CHECKOUT_CREATION_ERROR",
+            "El total de la factura fiscal de Stripe no coincide con el importe a pagar.",
+          code: "STRIPE_INVOICE_AMOUNT_MISMATCH",
         },
-        500,
+        409,
         corsHeaders,
       );
+    }
+
+    // ========================================================
+    // 25. CREAR CHECKOUT SESSION POR EL NETO A PAGAR
+    // ========================================================
+
+    let session: Stripe.Checkout.Session;
+    const { data: invoiceSessions } =
+      await stripe.checkout.sessions.list({
+        customer: stripeCustomerId,
+        limit: 100,
+      });
+    const previousInvoiceSessions = invoiceSessions
+      .filter((candidate) =>
+        candidate.client_reference_id === invoice.id &&
+        candidate.metadata?.invoice_id === invoice.id
+      )
+      .sort((left, right) => right.created - left.created);
+    const openSession = previousInvoiceSessions.find(
+      (candidate) => candidate.status === "open",
+    );
+
+    if (openSession) {
+      if (openSession.amount_total !== amountInCents) {
+        throw new Error(
+          "La sesión de Checkout abierta no coincide con el importe de la factura",
+        );
+      }
+
+      session = openSession;
+    } else {
+      const latestSession = previousInvoiceSessions[0];
+
+      if (latestSession?.status === "complete") {
+        if (latestSession.payment_status === "paid") {
+          return jsonResponse(
+            {
+              error:
+                "El pago de esta factura está completado y pendiente de sincronización.",
+              code: "STRIPE_PAYMENT_CONFIRMATION_PENDING",
+            },
+            409,
+            corsHeaders,
+          );
+        }
+
+        const previousPaymentIntentId =
+          typeof latestSession.payment_intent === "string"
+            ? latestSession.payment_intent
+            : latestSession.payment_intent?.id;
+
+        if (!previousPaymentIntentId) {
+          return jsonResponse(
+            {
+              error:
+                "Hay un intento de pago de esta factura pendiente de confirmación.",
+              code: "STRIPE_PAYMENT_CONFIRMATION_PENDING",
+            },
+            409,
+            corsHeaders,
+          );
+        }
+
+        const previousPaymentIntent =
+          await stripe.paymentIntents.retrieve(
+            previousPaymentIntentId,
+          );
+
+        if (
+          previousPaymentIntent.status !== "requires_payment_method" &&
+          previousPaymentIntent.status !== "canceled"
+        ) {
+          return jsonResponse(
+            {
+              error:
+                "Hay un intento de pago de esta factura pendiente de confirmación.",
+              code: "STRIPE_PAYMENT_CONFIRMATION_PENDING",
+            },
+            409,
+            corsHeaders,
+          );
+        }
+      }
+
+      try {
+        const checkoutParams: Stripe.Checkout.SessionCreateParams = {
+          mode: "payment",
+          customer: stripeCustomerId,
+          client_reference_id: invoice.id,
+          line_items: [
+            {
+              price_data: {
+                currency: "eur",
+                product_data: {
+                  name: stripeProductName,
+                  description: stripeDescription,
+                },
+                unit_amount: amountInCents,
+              },
+              quantity: 1,
+            },
+          ],
+          metadata: {
+            invoice_id: invoice.id,
+            stripe_invoice_id: stripeInvoiceId,
+            company_id: invoice.company_id || "",
+            user_id: invoice.user_id,
+          },
+          payment_intent_data: {
+            metadata: {
+              invoice_id: invoice.id,
+              stripe_invoice_id: stripeInvoiceId,
+              company_id: invoice.company_id || "",
+              user_id: invoice.user_id,
+            },
+          },
+          success_url:
+            `${appUrl}/area-cliente/facturacion?payment=success&invoice_id=${invoice.id}`,
+          cancel_url:
+            `${appUrl}/area-cliente/facturacion?payment=cancelled&invoice_id=${invoice.id}`,
+        };
+
+        session = await stripe.checkout.sessions.create(
+          checkoutParams,
+          {
+            idempotencyKey:
+              `modira-checkout-${invoice.id}-${latestSession?.id ?? "initial"}`,
+          },
+        );
+      } catch (stripeError) {
+        console.error(
+          "[create-checkout-session] ERROR DE STRIPE:",
+          stripeError,
+        );
+
+        return jsonResponse(
+          {
+            error: stripeError instanceof Error
+              ? stripeError.message
+              : "Stripe ha rechazado la creación del Checkout",
+            code: "STRIPE_CHECKOUT_CREATION_ERROR",
+          },
+          500,
+          corsHeaders,
+        );
+      }
     }
 
     // ========================================================

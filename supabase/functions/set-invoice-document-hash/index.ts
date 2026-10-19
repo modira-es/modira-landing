@@ -1671,13 +1671,44 @@ async function getInvoice(
     );
   }
 
-  if (!data) {
+if (!data) {
+  throw new Error(
+    "La factura no existe",
+  );
+}
+
+// ----------------------------------------------------------
+// OBTENER EL NÚMERO DEL PRESUPUESTO ASOCIADO
+// ----------------------------------------------------------
+
+const invoiceData = data as Record<string, any>;
+
+let quotationNumber: string | null = null;
+
+if (invoiceData["quotation_id"]) {
+  const {
+    data: quotation,
+    error: quotationError,
+  } = await supabaseAdmin
+    .from("quotations")
+    .select("numero_presupuesto")
+    .eq("id", invoiceData["quotation_id"])
+    .maybeSingle();
+
+  if (quotationError) {
     throw new Error(
-      "La factura no existe",
+      `No se ha podido obtener el presupuesto asociado a la factura: ${quotationError.message}`,
     );
   }
 
-  return data as Record<string, any>;
+  quotationNumber =
+    quotation?.numero_presupuesto ?? null;
+}
+
+return {
+  ...invoiceData,
+  quotation_number: quotationNumber,
+} as Record<string, any>;
 }
 
 // ============================================================
