@@ -145,33 +145,70 @@ function updateGoogleConsent(analyticsGranted: boolean) {
  * Solo se ejecuta después de que exista consentimiento
  * para analítica.
  */
-
 function loadGoogleAnalytics() {
   const measurementId = getGoogleAnalyticsId();
 
   if (!measurementId) {
+    console.error(
+      "[MODIRA GA4] No se ha encontrado VITE_GA_MEASUREMENT_ID."
+    );
     return;
   }
 
-  /*
-   * Evitar cargar el script más de una vez.
-   */
-  if (document.getElementById("google-analytics-script")) {
+  // Inicializar la cola de Google Analytics.
+  window.dataLayer = window.dataLayer || [];
+
+  window.gtag =
+    window.gtag ||
+    function (...args: unknown[]) {
+      window.dataLayer.push(args);
+    };
+
+  // Evitar duplicar la etiqueta.
+  const existingScript = document.getElementById(
+    "google-analytics-script"
+  );
+
+  // Si ya está instalada, volver a aplicar la configuración.
+  if (existingScript) {
+    window.gtag("consent", "update", {
+      analytics_storage: "granted",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
+    });
+
+    window[`ga-disable-${measurementId}`] = false;
+
+    window.gtag("config", measurementId, {
+      send_page_view: true,
+    });
+
+    console.info(
+      "[MODIRA GA4] Etiqueta existente; configuración actualizada.",
+      measurementId
+    );
+
     return;
   }
 
-  initializeGoogleTag();
-
-  /*
-   * Inicialización estándar de gtag.js.
-   */
+  // Inicializar Google Analytics antes de cargar el script.
   window.gtag("js", new Date());
 
-  window.gtag("config", measurementId);
+  window.gtag("consent", "update", {
+    analytics_storage: "granted",
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+  });
 
-  /*
-   * Cargar la etiqueta oficial de Google.
-   */
+  window[`ga-disable-${measurementId}`] = false;
+
+  window.gtag("config", measurementId, {
+    send_page_view: true,
+  });
+
+  // Cargar la etiqueta oficial de Google.
   const script = document.createElement("script");
 
   script.id = "google-analytics-script";
@@ -180,9 +217,22 @@ function loadGoogleAnalytics() {
     measurementId
   )}`;
 
+  script.onload = () => {
+    console.info(
+      "[MODIRA GA4] Script cargado correctamente.",
+      measurementId
+    );
+  };
+
+  script.onerror = () => {
+    console.error(
+      "[MODIRA GA4] Error al cargar el script.",
+      measurementId
+    );
+  };
+
   document.head.appendChild(script);
 }
-
 /*
  * ============================================================
  * REGISTRO DEL CONSENTIMIENTO
