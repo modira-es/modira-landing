@@ -150,62 +150,37 @@ function loadGoogleAnalytics() {
   const measurementId = getGoogleAnalyticsId();
 
   if (!measurementId) {
-    console.error(
-      "[MODIRA GA4] No se ha encontrado VITE_GA_MEASUREMENT_ID."
-    );
     return;
   }
 
-  // Evitar cargar Google Analytics más de una vez.
-  const existingScript = document.getElementById(
-    "google-analytics-script"
-  );
-
-  if (existingScript) {
-    console.info("[MODIRA GA4] El script ya está cargado.");
+  /*
+   * Evitar cargar el script más de una vez.
+   */
+  if (document.getElementById("google-analytics-script")) {
     return;
   }
 
-  // Inicializar la cola de eventos.
-  window.dataLayer = window.dataLayer || [];
+  initializeGoogleTag();
 
-  // Crear gtag si todavía no existe.
-  window.gtag =
-    window.gtag ||
-    function (...args: unknown[]) {
-      window.dataLayer.push(args);
-    };
-
-  // Inicializar Google Analytics.
+  /*
+   * Inicialización estándar de gtag.js.
+   */
   window.gtag("js", new Date());
 
-  // Desactivar la medición automática de page_view para evitar
-  // duplicados si añadimos navegación manual posteriormente.
-  window.gtag("config", measurementId, {
-    send_page_view: true,
-  });
+  window.gtag("config", measurementId);
 
-  // Cargar el script oficial de Google.
+  /*
+   * Cargar la etiqueta oficial de Google.
+   */
   const script = document.createElement("script");
 
   script.id = "google-analytics-script";
   script.async = true;
-  script.src =
-    `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
-      measurementId
-    )}`;
-
-  script.onload = () => {
-    console.info("[MODIRA GA4] Script cargado correctamente.");
-  };
-
-  script.onerror = () => {
-    console.error("[MODIRA GA4] Error al cargar el script.");
-  };
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
+    measurementId
+  )}`;
 
   document.head.appendChild(script);
-
-  console.info("[MODIRA GA4] Inicialización solicitada:", measurementId);
 }
 
 /*
