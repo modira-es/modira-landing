@@ -73,7 +73,13 @@ function getGoogleAnalyticsId(): string | null {
  */
 
 function initializeGoogleTag() {
- initializeGoogleTag();
+  window.dataLayer = window.dataLayer || [];
+
+  if (!window.gtag) {
+    window.gtag = function () {
+      window.dataLayer.push(arguments);
+    } as (...args: unknown[]) => void;
+  }
 }
 
 /*
@@ -150,13 +156,7 @@ function loadGoogleAnalytics() {
   }
 
   // Inicializar la cola de Google Analytics.
-  window.dataLayer = window.dataLayer || [];
-
-  window.gtag =
-    window.gtag ||
-    function (...args: unknown[]) {
-      window.dataLayer.push(args);
-    };
+ initializeGoogleTag();
 
   // Evitar duplicar la etiqueta.
   const existingScript = document.getElementById(
