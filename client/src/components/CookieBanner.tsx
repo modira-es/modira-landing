@@ -75,11 +75,11 @@ function getGoogleAnalyticsId(): string | null {
 function initializeGoogleTag() {
   window.dataLayer = window.dataLayer || [];
 
-  window.gtag =
-    window.gtag ||
-    function (...args: unknown[]) {
-      window.dataLayer.push(args);
-    };
+  if (!window.gtag) {
+    window.gtag = function () {
+      window.dataLayer.push(arguments);
+    } as (...args: unknown[]) => void;
+  }
 }
 
 /*
